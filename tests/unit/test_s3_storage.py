@@ -33,7 +33,7 @@ def test_upload_bytes_put_object(mock_boto):
     inner = MagicMock()
     mock_boto.return_value = inner
     store = S3ObjectStorage(
-        bucket="veridoc",
+        bucket="verifiedsignal",
         endpoint_url=None,
         access_key_id="k",
         secret_access_key="s",
@@ -43,7 +43,7 @@ def test_upload_bytes_put_object(mock_boto):
     store.upload_bytes("raw/a/b.txt", b"hi", "text/plain")
     inner.put_object.assert_called_once()
     call_kw = inner.put_object.call_args.kwargs
-    assert call_kw["Bucket"] == "veridoc"
+    assert call_kw["Bucket"] == "verifiedsignal"
     assert call_kw["Key"] == "raw/a/b.txt"
     assert call_kw["Body"] == b"hi"
     assert call_kw["ContentType"] == "text/plain"

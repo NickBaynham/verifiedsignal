@@ -1,5 +1,5 @@
 -- =============================================================================
--- Veridoc: Phase 1 intake — document file metadata, storage key, lifecycle
+-- VerifiedSignal: Phase 1 intake — document file metadata, storage key, lifecycle
 -- =============================================================================
 
 -- Lifecycle: we skip a separate `created` *state* in the happy path and use

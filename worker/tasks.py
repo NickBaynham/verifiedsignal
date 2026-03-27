@@ -7,7 +7,7 @@ from typing import Any
 from worker.logging import get_logger
 from worker.pipeline import run_document_pipeline
 
-log = get_logger("veridoc.worker.tasks")
+log = get_logger("verifiedsignal.worker.tasks")
 
 
 async def process_document(ctx: dict[str, Any], document_id: str) -> str:

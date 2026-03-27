@@ -10,7 +10,7 @@ from typing import Any
 
 from worker.logging import get_logger
 
-log = get_logger("veridoc.worker.events")
+log = get_logger("verifiedsignal.worker.events")
 
 
 def emit_worker_event(event_type: str, payload: dict[str, Any]) -> None:

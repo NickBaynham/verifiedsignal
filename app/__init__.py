@@ -1,1 +1,1 @@
-"""Veridoc FastAPI application package."""
+"""VerifiedSignal FastAPI application package."""

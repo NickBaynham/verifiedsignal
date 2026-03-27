@@ -1,5 +1,5 @@
 -- =============================================================================
--- Veridoc: rollback initial canonical schema
+-- VerifiedSignal: rollback initial canonical schema
 -- =============================================================================
 -- Drops objects created in 001_initial_schema.up.sql in dependency-safe order.
 -- WARNING: This destroys all data in these tables. Use only in dev or controlled
@@ -16,4 +16,4 @@ DROP TABLE IF EXISTS organization_members CASCADE;
 DROP TABLE IF EXISTS organizations CASCADE;
 DROP TABLE IF EXISTS users CASCADE;
 
-DROP FUNCTION IF EXISTS veridoc_set_updated_at() CASCADE;
+DROP FUNCTION IF EXISTS verifiedsignal_set_updated_at() CASCADE;

@@ -16,7 +16,7 @@ from typing import Any
 from worker.events import emit_worker_event
 from worker.logging import get_logger
 
-log = get_logger("veridoc.worker.pipeline")
+log = get_logger("verifiedsignal.worker.pipeline")
 
 # Simulated stages — map to `pipeline_runs.stage` values in the real system.
 STAGES = ("ingest", "extract", "enrich", "score", "index", "finalize")

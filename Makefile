@@ -6,7 +6,7 @@ PDM ?= pdm
 DOCKER_COMPOSE ?= docker compose
 
 help:
-	@echo "veridoc — common targets"
+	@echo "VerifiedSignal — common targets"
 	@echo ""
 	@echo "  make setup       Install PDM (if missing) and project dependencies"
 	@echo "  make lock        Refresh pdm.lock from pyproject.toml"

@@ -16,12 +16,12 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-    app_name: str = "veridoc-api"
+    app_name: str = "verifiedsignal-api"
     api_v1_prefix: str = "/api/v1"
     environment: str = "development"
 
     database_url: str = Field(
-        default="postgresql://veridoc:veridoc@localhost:5432/veridoc",
+        default="postgresql://verifiedsignal:verifiedsignal@localhost:5432/verifiedsignal",
         validation_alias="DATABASE_URL",
     )
     redis_url: str = Field(
@@ -38,7 +38,7 @@ class Settings(BaseSettings):
     # Intake: default collection when multipart form omits collection_id (seeded by migration 002).
     default_collection_id: UUID | None = Field(
         default=UUID("00000000-0000-4000-8000-000000000002"),
-        validation_alias="VERIDOC_DEFAULT_COLLECTION_ID",
+        validation_alias="VERIFIEDSIGNAL_DEFAULT_COLLECTION_ID",
     )
 
     max_upload_bytes: int = Field(default=52_428_800, validation_alias="MAX_UPLOAD_BYTES")  # 50 MiB
@@ -50,7 +50,7 @@ class Settings(BaseSettings):
         validation_alias="AWS_SECRET_ACCESS_KEY",
     )
     s3_region: str = Field(default="us-east-1", validation_alias="AWS_DEFAULT_REGION")
-    s3_bucket: str = Field(default="veridoc", validation_alias="S3_BUCKET")
+    s3_bucket: str = Field(default="verifiedsignal", validation_alias="S3_BUCKET")
     s3_use_path_style: bool = Field(default=True, validation_alias="S3_USE_PATH_STYLE")
 
     opensearch_url: str = Field(
@@ -58,8 +58,11 @@ class Settings(BaseSettings):
         validation_alias="OPENSEARCH_URL",
     )
 
-    # Must match worker `WorkerSettings.queue_name` / `VERIDOC_ARQ_QUEUE`.
-    arq_queue_name: str = Field(default="veridoc:jobs", validation_alias="VERIDOC_ARQ_QUEUE")
+    # Must match worker `WorkerSettings.queue_name` / `VERIFIEDSIGNAL_ARQ_QUEUE`.
+    arq_queue_name: str = Field(
+        default="verifiedsignal:jobs",
+        validation_alias="VERIFIEDSIGNAL_ARQ_QUEUE",
+    )
 
 
 @lru_cache

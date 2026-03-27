@@ -1,4 +1,4 @@
-# veridoc
+# VerifiedSignal
 
 A document intelligence platform. This repository uses **Python** with **[PDM](https://pdm-project.org/latest/)** for dependencies, a **Makefile** for setup and common tasks, and **Docker Compose** for local infrastructure. **PostgreSQL** is the system-of-record; **OpenSearch** is a derived, disposable index; a **FastAPI** service exposes synchronous HTTP + **SSE**; an **ARQ** worker runs async background jobs on **Redis**.
 
@@ -6,7 +6,7 @@ A document intelligence platform. This repository uses **Python** with **[PDM](h
 
 This repo is an **early scaffold** with the following in place:
 
-- **CLI package** — Python **3.11+**, `src/veridoc/`, small CLI (`pdm run python -m veridoc`, `pdm run veridoc`).
+- **CLI package** — Python **3.11+**, `src/verifiedsignal/`, small CLI (`pdm run python -m verifiedsignal`, `pdm run verifiedsignal`).
 - **HTTP API** — root package **`app/`**: **FastAPI** (`app/main.py`), **`/api/v1`** routes for health, info, **Phase 1 document intake** (`POST /api/v1/documents` multipart upload → Postgres + MinIO/S3 + ARQ), search stub, and **SSE** (`/api/v1/events/stream`). **SQLAlchemy** session factory for Postgres (`app/db/session.py`); placeholder auth (`app/auth/placeholder.py`).
 - **Worker** — root package **`worker/`**: **[ARQ](https://arq-docs.helpmanual.io/)** worker on Redis (`pdm run worker`), `process_document` task with **simulated pipeline stages** (`worker/pipeline.py`). Intended to evolve into real ingestion, scoring, and OpenSearch indexing (all driven from Postgres truth).
 - **PDM** — `pyproject.toml`, **`pdm.lock`**, scripts: **`pdm run api`** (uvicorn reload), **`pdm run api-prod`**, **`pdm run worker`**, dev group (**pytest**, **ruff**, etc.).
@@ -44,13 +44,13 @@ This repo is an **early scaffold** with the following in place:
 3. Run the CLI:
 
    ```bash
-   pdm run python -m veridoc
+   pdm run python -m verifiedsignal
    ```
 
    Or use the console script:
 
    ```bash
-   pdm run veridoc
+   pdm run verifiedsignal
    ```
 
 4. Run tests and linters:
@@ -76,14 +76,14 @@ From the repo root (PDM puts the project on `PYTHONPATH`):
 
 ```bash
 make setup
-export DATABASE_URL=postgresql://veridoc:veridoc@localhost:5432/veridoc
+export DATABASE_URL=postgresql://verifiedsignal:verifiedsignal@localhost:5432/verifiedsignal
 # Apply migrations 001 + 002 (intake columns + default collection seed) — see db/README.md
 export REDIS_URL=redis://localhost:6379/0
 # MinIO / S3 (omit and set USE_FAKE_STORAGE=true to store bytes in-memory only)
 export S3_ENDPOINT_URL=http://127.0.0.1:9000
 export AWS_ACCESS_KEY_ID=minioadmin
 export AWS_SECRET_ACCESS_KEY=minioadmin
-export S3_BUCKET=veridoc
+export S3_BUCKET=verifiedsignal
 export S3_USE_PATH_STYLE=true
 # Optional: no Redis — in-memory queue (worker will not see jobs)
 export USE_FAKE_QUEUE=true
@@ -119,7 +119,7 @@ docker run -d --name minio -p 9000:9000 -p 9001:9001 \
   quay.io/minio/minio server /data --console-address ":9001"
 ```
 
-Create the **`veridoc`** bucket once (Console at [http://127.0.0.1:9001](http://127.0.0.1:9001), or **`mc`**). The **`S3ObjectStorage`** adapter attempts **`create_bucket`** if **`head_bucket`** reports a missing bucket (simple dev convenience; production often provisions buckets out-of-band).
+Create the **`verifiedsignal`** bucket once (Console at [http://127.0.0.1:9001](http://127.0.0.1:9001), or **`mc`**). The **`S3ObjectStorage`** adapter attempts **`create_bucket`** if **`head_bucket`** reports a missing bucket (simple dev convenience; production often provisions buckets out-of-band).
 
 Point the API at MinIO with **`S3_ENDPOINT_URL`** (e.g. `http://127.0.0.1:9000`) and **`S3_USE_PATH_STYLE=true`**.
 
@@ -130,7 +130,7 @@ curl -s http://127.0.0.1:8000/api/v1/health | jq
 curl -s -X POST http://127.0.0.1:8000/api/v1/documents \
   -F "file=@./README.md;type=text/markdown" \
   -F "title=Demo upload" | jq
-# Optional explicit collection (otherwise VERIDOC_DEFAULT_COLLECTION_ID / seeded default-inbox)
+# Optional explicit collection (otherwise VERIFIEDSIGNAL_DEFAULT_COLLECTION_ID / seeded default-inbox)
 # -F "collection_id=00000000-0000-4000-8000-000000000002"
 ```
 
@@ -165,7 +165,7 @@ curl -N http://127.0.0.1:8000/api/v1/events/stream
 |--------|---------|
 | `pdm run pytest` | Same as `make test` |
 | `pdm run pytest -m "unit or integration"` | Typical CI subset (with `DATABASE_URL` set) |
-| `pdm run pytest --cov=veridoc` | Tests with coverage (pytest-cov installed) |
+| `pdm run pytest --cov=verifiedsignal` | Tests with coverage (pytest-cov installed) |
 | `pdm run api` / `pdm run api-prod` | Uvicorn (`app.main:app`) |
 | `pdm run worker` | ARQ worker (`worker.main.WorkerSettings`) |
 | `pdm run ruff check src tests app worker` | Same as `make lint` |
@@ -175,7 +175,7 @@ curl -N http://127.0.0.1:8000/api/v1/events/stream
 
 | Command | Purpose |
 |--------|---------|
-| `make docker-build` | Build the **app** image (`veridoc:local`) |
+| `make docker-build` | Build the **app** image (`verifiedsignal:local`) |
 | `make docker-up` | `make config`, then **`docker compose up --build`** (full stack in the **foreground**) |
 | `make docker-down` | `docker compose down` (stops services; keeps volumes) |
 | `make docker-test` | `make config`, build, then **`docker compose --profile test run --rm test`** (pytest in Docker) |
@@ -190,11 +190,11 @@ curl -N http://127.0.0.1:8000/api/v1/events/stream
 | `docker compose logs -f app` | Follow logs for `app` (replace `app` with any service name) |
 | `docker compose logs -f opensearch opensearch-dashboards` | Follow OpenSearch-related logs |
 | `docker compose --profile test run --rm test` | Pytest container without going through Make |
-| `docker compose run --rm app pdm run veridoc -- --help` | Legacy CLI inside the app image |
+| `docker compose run --rm app pdm run verifiedsignal -- --help` | Legacy CLI inside the app image |
 | `docker compose logs -f worker` | Worker logs |
 | `docker compose down -v` | Stop and **remove named volumes** (wipes Postgres/Redis/MinIO/OpenSearch data) |
 | `docker compose pull` | Pull newer infra images (MinIO, OpenSearch, etc.) |
-| `docker compose exec -T postgres psql -U veridoc -d veridoc -v ON_ERROR_STOP=1 < db/migrations/001_initial_schema.up.sql` | Apply initial DB schema (from repo root; see [`db/README.md`](db/README.md)) |
+| `docker compose exec -T postgres psql -U verifiedsignal -d verifiedsignal -v ON_ERROR_STOP=1 < db/migrations/001_initial_schema.up.sql` | Apply initial DB schema (from repo root; see [`db/README.md`](db/README.md)) |
 
 ### Local URLs (default ports)
 
@@ -206,7 +206,7 @@ curl -N http://127.0.0.1:8000/api/v1/events/stream
 | OpenSearch Dashboards | [http://localhost:5601](http://localhost:5601) |
 | PostgreSQL | `localhost:5432` |
 | Redis | `localhost:6379` |
-| Veridoc API (Compose `app`) | [http://localhost:8000](http://localhost:8000) (`/api/v1/...`) |
+| VerifiedSignal API (Compose `app`) | [http://localhost:8000](http://localhost:8000) (`/api/v1/...`) |
 
 ## Makefile reference
 
@@ -269,7 +269,7 @@ The **app** service waits for **postgres** and **redis** only (MinIO/OpenSearch 
 
 **OpenSearch:** the cluster runs with the security plugin disabled via `DISABLE_SECURITY_PLUGIN=true` in Compose—suitable only for trusted local machines; do not expose these ports on a network. On **Linux**, if the node fails to start, raise `vm.max_map_count` (for example `sudo sysctl -w vm.max_map_count=262144`). See the [OpenSearch Docker install notes](https://opensearch.org/docs/latest/install-and-configure/install-opensearch/docker/).
 
-**MinIO:** open `http://localhost:9001` and sign in with `MINIO_ROOT_USER` / `MINIO_ROOT_PASSWORD` from `.env` (defaults match the example file). Create a bucket named like `S3_BUCKET` (`veridoc` by default) when you begin storing objects.
+**MinIO:** open `http://localhost:9001` and sign in with `MINIO_ROOT_USER` / `MINIO_ROOT_PASSWORD` from `.env` (defaults match the example file). Create a bucket named like `S3_BUCKET` (`verifiedsignal` by default) when you begin storing objects.
 
 `.env` is optional: **`app`** and **`test`** use `env_file` with `required: false`. Compose still applies defaults from `docker-compose.yml` when variables are unset. Run **`make config`** to create `.env` from **`.env.example`** so host port overrides and credentials stay consistent.
 
@@ -278,7 +278,7 @@ For a consolidated command list, see **[Useful commands](#useful-commands)** abo
 ## Configuration and environment
 
 - **`.env.example`** — template for local and Compose-related variables (Postgres, Redis, MinIO/S3, OpenSearch ports, `DATABASE_URL`, `REDIS_URL`, etc.). **`make config`** copies it to **`.env`** when `.env` is missing.
-- **`VERIDOC_CONFIG_DIR`** — directory the CLI treats as the config root (default `config` if unset). Under Compose it is set to `/app/config` inside the container.
+- **`VERIFIEDSIGNAL_CONFIG_DIR`** — directory the CLI treats as the config root (default `config` if unset). Under Compose it is set to `/app/config` inside the container.
 - **`config/`** — mount point for configuration files. **`config/application.example.yml`** is a sample; copy or adapt it for your own `application.yml` (or other files) as the product grows.
 - **Database** — apply **`db/migrations/001_initial_schema.up.sql`** against your Postgres (see [`db/README.md`](db/README.md)). **`DATABASE_URL`** in `.env` should point at that database.
 
@@ -300,7 +300,7 @@ Do not commit secrets. `.env` is gitignored.
 ├── db/
 │   ├── README.md           # schema docs + apply/rollback examples
 │   └── migrations/         # *.up.sql / *.down.sql
-├── src/veridoc/            # CLI package
+├── src/verifiedsignal/            # CLI package
 ├── tests/                  # pytest; see tests/README.md
 └── config/                 # runtime configuration (mounted in Docker)
 ```

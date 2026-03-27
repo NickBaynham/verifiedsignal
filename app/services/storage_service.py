@@ -58,7 +58,7 @@ class ObjectStorage(Protocol):
 class InMemoryObjectStorage:
     """Test / local dev without MinIO."""
 
-    def __init__(self, bucket: str = "veridoc") -> None:
+    def __init__(self, bucket: str = "verifiedsignal") -> None:
         self._bucket = bucket
         self.objects: dict[str, bytes] = {}
 

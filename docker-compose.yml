@@ -5,9 +5,9 @@ services:
   postgres:
     image: postgres:16-alpine
     environment:
-      POSTGRES_USER: ${POSTGRES_USER:-veridoc}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-veridoc}
-      POSTGRES_DB: ${POSTGRES_DB:-veridoc}
+      POSTGRES_USER: ${POSTGRES_USER:-verifiedsignal}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-verifiedsignal}
+      POSTGRES_DB: ${POSTGRES_DB:-verifiedsignal}
     ports:
       - "${POSTGRES_PORT:-5432}:5432"
     volumes:
@@ -16,7 +16,7 @@ services:
       test:
         [
           "CMD-SHELL",
-          "pg_isready -U ${POSTGRES_USER:-veridoc} -d ${POSTGRES_DB:-veridoc}",
+          "pg_isready -U ${POSTGRES_USER:-verifiedsignal} -d ${POSTGRES_DB:-verifiedsignal}",
         ]
       interval: 5s
       timeout: 5s
@@ -92,7 +92,7 @@ services:
 
   app:
     build: .
-    image: veridoc:local
+    image: verifiedsignal:local
     depends_on:
       postgres:
         condition: service_healthy
@@ -103,16 +103,16 @@ services:
         required: false
     environment:
       PYTHONPATH: /app
-      VERIDOC_CONFIG_DIR: /app/config
-      DATABASE_URL: ${DATABASE_URL:-postgresql://veridoc:veridoc@postgres:5432/veridoc}
+      VERIFIEDSIGNAL_CONFIG_DIR: /app/config
+      DATABASE_URL: ${DATABASE_URL:-postgresql://verifiedsignal:verifiedsignal@postgres:5432/verifiedsignal}
       REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
-      VERIDOC_ARQ_QUEUE: ${VERIDOC_ARQ_QUEUE:-veridoc:jobs}
+      VERIFIEDSIGNAL_ARQ_QUEUE: ${VERIFIEDSIGNAL_ARQ_QUEUE:-verifiedsignal:jobs}
       USE_FAKE_QUEUE: ${USE_FAKE_QUEUE:-false}
       S3_ENDPOINT_URL: ${S3_ENDPOINT_URL:-http://minio:9000}
       AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-minioadmin}
       AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-minioadmin}
       AWS_DEFAULT_REGION: ${AWS_DEFAULT_REGION:-us-east-1}
-      S3_BUCKET: ${S3_BUCKET:-veridoc}
+      S3_BUCKET: ${S3_BUCKET:-verifiedsignal}
       OPENSEARCH_URL: ${OPENSEARCH_URL:-http://opensearch:9200}
     ports:
       - "${API_PORT:-8000}:8000"
@@ -122,7 +122,7 @@ services:
 
   worker:
     build: .
-    image: veridoc:local
+    image: verifiedsignal:local
     depends_on:
       redis:
         condition: service_healthy
@@ -132,13 +132,13 @@ services:
     environment:
       PYTHONPATH: /app
       REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
-      VERIDOC_ARQ_QUEUE: ${VERIDOC_ARQ_QUEUE:-veridoc:jobs}
+      VERIFIEDSIGNAL_ARQ_QUEUE: ${VERIFIEDSIGNAL_ARQ_QUEUE:-verifiedsignal:jobs}
       WORKER_LOG_LEVEL: ${WORKER_LOG_LEVEL:-INFO}
     command: ["pdm", "run", "worker"]
 
   test:
     build: .
-    image: veridoc:local
+    image: verifiedsignal:local
     profiles:
       - test
     env_file:
@@ -146,7 +146,7 @@ services:
         required: false
     environment:
       PYTHONPATH: /app
-      VERIDOC_CONFIG_DIR: /app/config
+      VERIFIEDSIGNAL_CONFIG_DIR: /app/config
     volumes:
       - ./config:/app/config:ro
     command: ["pdm", "run", "pytest"]

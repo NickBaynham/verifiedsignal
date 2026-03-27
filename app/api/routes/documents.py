@@ -22,7 +22,7 @@ def upload_document(
         default=None,
         description=(
             "Target collection UUID; "
-            "defaults to VERIDOC_DEFAULT_COLLECTION_ID when omitted"
+            "defaults to VERIFIEDSIGNAL_DEFAULT_COLLECTION_ID when omitted"
         ),
     ),
     title: str | None = Form(

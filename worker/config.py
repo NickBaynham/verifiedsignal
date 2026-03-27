@@ -13,6 +13,6 @@ def build_redis_settings() -> RedisSettings:
 
 
 # Queue name must match API `Settings.arq_queue_name` / `create_pool(..., default_queue_name=...)`.
-QUEUE_NAME = os.environ.get("VERIDOC_ARQ_QUEUE", "veridoc:jobs")
+QUEUE_NAME = os.environ.get("VERIFIEDSIGNAL_ARQ_QUEUE", "verifiedsignal:jobs")
 
 redis_settings = build_redis_settings()

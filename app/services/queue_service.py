@@ -7,7 +7,7 @@ import logging
 
 from app.services.queue_backend import get_job_queue
 
-log = logging.getLogger("veridoc.queue")
+log = logging.getLogger("verifiedsignal.queue")
 
 
 async def enqueue_process_document(document_id: str) -> str:

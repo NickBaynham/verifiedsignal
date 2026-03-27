@@ -28,7 +28,7 @@ def test_resolve_collection_id_explicit_uuid_string():
 @pytest.mark.unit
 def test_resolve_collection_id_uses_env_default(monkeypatch):
     cid = uuid.uuid4()
-    monkeypatch.setenv("VERIDOC_DEFAULT_COLLECTION_ID", str(cid))
+    monkeypatch.setenv("VERIFIEDSIGNAL_DEFAULT_COLLECTION_ID", str(cid))
     reset_settings_cache()
     from app.core.config import get_settings
 

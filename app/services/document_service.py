@@ -29,7 +29,7 @@ from app.services.exceptions import IntakeValidationError, StorageUploadError
 from app.services.queue_service import enqueue_process_document_sync
 from app.services.storage_service import ObjectStorage, build_raw_object_key, get_object_storage
 
-log = logging.getLogger("veridoc.intake")
+log = logging.getLogger("verifiedsignal.intake")
 
 
 def _read_upload_to_limit(raw: bytes, *, max_bytes: int) -> None:
@@ -46,7 +46,7 @@ def resolve_collection_id(
     if collection_id_param is None or collection_id_param.strip() == "":
         if settings.default_collection_id is None:
             raise IntakeValidationError(
-                "collection_id is required (or set VERIDOC_DEFAULT_COLLECTION_ID)"
+                "collection_id is required (or set VERIFIEDSIGNAL_DEFAULT_COLLECTION_ID)"
             )
         return settings.default_collection_id
     try:

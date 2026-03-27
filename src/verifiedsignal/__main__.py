@@ -1,4 +1,4 @@
-from veridoc.cli import main
+from verifiedsignal.cli import main
 
 if __name__ == "__main__":
     main()

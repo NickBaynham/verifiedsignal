@@ -6,20 +6,20 @@ import sys
 
 import pytest
 
-from veridoc.cli import main
+from verifiedsignal.cli import main
 
 
 @pytest.mark.unit
 def test_main_runs(capsys, monkeypatch):
-    monkeypatch.setattr(sys, "argv", ["veridoc"])
+    monkeypatch.setattr(sys, "argv", ["verifiedsignal"])
     main()
     out = capsys.readouterr().out
-    assert "veridoc" in out
+    assert "verifiedsignal" in out
 
 
 @pytest.mark.unit
 def test_main_respects_config_dir_env(capsys, monkeypatch):
-    monkeypatch.setattr(sys, "argv", ["veridoc"])
-    monkeypatch.setenv("VERIDOC_CONFIG_DIR", "/tmp/veridoc-cfg")
+    monkeypatch.setattr(sys, "argv", ["verifiedsignal"])
+    monkeypatch.setenv("VERIFIEDSIGNAL_CONFIG_DIR", "/tmp/verifiedsignal-cfg")
     main()
-    assert "/tmp/veridoc-cfg" in capsys.readouterr().out
+    assert "/tmp/verifiedsignal-cfg" in capsys.readouterr().out

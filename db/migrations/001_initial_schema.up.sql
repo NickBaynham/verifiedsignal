@@ -1,5 +1,5 @@
 -- =============================================================================
--- Veridoc: initial canonical schema (PostgreSQL)
+-- VerifiedSignal: initial canonical schema (PostgreSQL)
 -- =============================================================================
 -- Postgres is the system-of-record. OpenSearch/Elasticsearch holds only derived
 -- index state and can be dropped and rebuilt from this data plus pipeline logs.
@@ -17,7 +17,7 @@
 -- -----------------------------------------------------------------------------
 -- Updated-at trigger (reused by all mutable tables)
 -- -----------------------------------------------------------------------------
-CREATE OR REPLACE FUNCTION veridoc_set_updated_at()
+CREATE OR REPLACE FUNCTION verifiedsignal_set_updated_at()
 RETURNS TRIGGER
 LANGUAGE plpgsql
 AS $$
@@ -27,7 +27,7 @@ BEGIN
 END;
 $$;
 
-COMMENT ON FUNCTION veridoc_set_updated_at() IS
+COMMENT ON FUNCTION verifiedsignal_set_updated_at() IS
   'Sets updated_at to transaction time on UPDATE; keeps row metadata consistent for auditing.';
 
 -- -----------------------------------------------------------------------------
@@ -52,7 +52,7 @@ CREATE UNIQUE INDEX uq_users_external_sub ON users (external_sub) WHERE external
 
 CREATE TRIGGER trg_users_updated_at
   BEFORE UPDATE ON users
-  FOR EACH ROW EXECUTE PROCEDURE veridoc_set_updated_at();
+  FOR EACH ROW EXECUTE PROCEDURE verifiedsignal_set_updated_at();
 
 COMMENT ON TABLE users IS
   'People who act in the system; organization affiliation is modeled via organization_members.';
@@ -81,7 +81,7 @@ CREATE UNIQUE INDEX uq_organizations_slug ON organizations (slug);
 
 CREATE TRIGGER trg_organizations_updated_at
   BEFORE UPDATE ON organizations
-  FOR EACH ROW EXECUTE PROCEDURE veridoc_set_updated_at();
+  FOR EACH ROW EXECUTE PROCEDURE verifiedsignal_set_updated_at();
 
 COMMENT ON TABLE organizations IS
   'Tenant boundary; owns collections and membership. Search indices are partitioned by org/collection in derived stores.';
@@ -107,7 +107,7 @@ CREATE INDEX ix_organization_members_user_id ON organization_members (user_id);
 
 CREATE TRIGGER trg_organization_members_updated_at
   BEFORE UPDATE ON organization_members
-  FOR EACH ROW EXECUTE PROCEDURE veridoc_set_updated_at();
+  FOR EACH ROW EXECUTE PROCEDURE verifiedsignal_set_updated_at();
 
 COMMENT ON TABLE organization_members IS
   'Many-to-many membership; keeps users reusable across orgs and supports role-based access at the app layer.';
@@ -132,7 +132,7 @@ CREATE INDEX ix_collections_organization_id ON collections (organization_id);
 
 CREATE TRIGGER trg_collections_updated_at
   BEFORE UPDATE ON collections
-  FOR EACH ROW EXECUTE PROCEDURE veridoc_set_updated_at();
+  FOR EACH ROW EXECUTE PROCEDURE verifiedsignal_set_updated_at();
 
 COMMENT ON TABLE collections IS
   'Groups documents under an organization; natural unit for ACLs and reindex fan-out.';
@@ -167,7 +167,7 @@ CREATE UNIQUE INDEX uq_documents_collection_external_key
 
 CREATE TRIGGER trg_documents_updated_at
   BEFORE UPDATE ON documents
-  FOR EACH ROW EXECUTE PROCEDURE veridoc_set_updated_at();
+  FOR EACH ROW EXECUTE PROCEDURE verifiedsignal_set_updated_at();
 
 COMMENT ON TABLE documents IS
   'Logical document in a collection; OpenSearch documents should use id = documents.id for trivial full reindex.';
@@ -202,7 +202,7 @@ CREATE INDEX ix_document_sources_document_created ON document_sources (document_
 
 CREATE TRIGGER trg_document_sources_updated_at
   BEFORE UPDATE ON document_sources
-  FOR EACH ROW EXECUTE PROCEDURE veridoc_set_updated_at();
+  FOR EACH ROW EXECUTE PROCEDURE verifiedsignal_set_updated_at();
 
 COMMENT ON TABLE document_sources IS
   'Provenance and ingestion metadata; rebuilding search does not require this, but audits and re-ingestion do.';
@@ -255,7 +255,7 @@ CREATE INDEX ix_pipeline_runs_pipeline_name_version ON pipeline_runs (pipeline_n
 
 CREATE TRIGGER trg_pipeline_runs_updated_at
   BEFORE UPDATE ON pipeline_runs
-  FOR EACH ROW EXECUTE PROCEDURE veridoc_set_updated_at();
+  FOR EACH ROW EXECUTE PROCEDURE verifiedsignal_set_updated_at();
 
 COMMENT ON TABLE pipeline_runs IS
   'One execution of a pipeline for a document; drives reproducible reindex (replay) and operational dashboards.';
@@ -345,7 +345,7 @@ CREATE UNIQUE INDEX uq_document_scores_one_canonical_per_document
 
 CREATE TRIGGER trg_document_scores_updated_at
   BEFORE UPDATE ON document_scores
-  FOR EACH ROW EXECUTE PROCEDURE veridoc_set_updated_at();
+  FOR EACH ROW EXECUTE PROCEDURE verifiedsignal_set_updated_at();
 
 COMMENT ON TABLE document_scores IS
   'Time-series scoring; canonical row is the application-defined "current truth" for downstream index denormalization.';

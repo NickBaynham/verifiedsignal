@@ -1,5 +1,5 @@
 [project]
-name = "veridoc"
+name = "verifiedsignal"
 version = "0.1.0"
 description = "A Document Intelligence Platform"
 readme = "README.md"
@@ -18,7 +18,7 @@ dependencies = [
 ]
 
 [project.scripts]
-veridoc = "veridoc.cli:main"
+verifiedsignal = "verifiedsignal.cli:main"
 
 [build-system]
 requires = ["pdm-backend"]

@@ -9,10 +9,10 @@ import pytest
 
 @pytest.mark.unit
 def test_version_matches_pyproject():
-    import veridoc
+    import verifiedsignal
 
-    dist_version = importlib.metadata.version("veridoc")
-    assert veridoc.__version__ == dist_version
+    dist_version = importlib.metadata.version("verifiedsignal")
+    assert verifiedsignal.__version__ == dist_version
 
 
 @pytest.mark.unit

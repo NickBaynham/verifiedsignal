@@ -19,7 +19,7 @@ def test_info(api_client):
     r = api_client.get("/api/v1/info")
     assert r.status_code == 200
     data = r.json()
-    assert data["service"] == "veridoc-api"
+    assert data["service"] == "verifiedsignal-api"
     assert "/api/v1" in data["api_prefix"]
 
 

@@ -1,1 +1,1 @@
-"""Veridoc background worker (ARQ + Redis)."""
+"""VerifiedSignal background worker (ARQ + Redis)."""

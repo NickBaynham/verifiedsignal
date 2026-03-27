@@ -1,6 +1,6 @@
-# Veridoc database (PostgreSQL)
+# VerifiedSignal database (PostgreSQL)
 
-This directory holds **canonical** schema definitions for Veridoc. The application treats **PostgreSQL as the write master and system-of-record**. OpenSearch (or Elasticsearch) is a **derived search layer** only.
+This directory holds **canonical** schema definitions for VerifiedSignal. The application treats **PostgreSQL as the write master and system-of-record**. OpenSearch (or Elasticsearch) is a **derived search layer** only.
 
 ## Migrations
 
@@ -17,14 +17,14 @@ With Docker Compose Postgres (from the repo root):
 
 ```bash
 docker compose up -d postgres
-docker compose exec -T postgres psql -U veridoc -d veridoc -v ON_ERROR_STOP=1 < db/migrations/001_initial_schema.up.sql
+docker compose exec -T postgres psql -U verifiedsignal -d verifiedsignal -v ON_ERROR_STOP=1 < db/migrations/001_initial_schema.up.sql
 ```
 
 Or from a host with `psql`:
 
 ```bash
-psql "postgresql://veridoc:veridoc@localhost:5432/veridoc" -v ON_ERROR_STOP=1 -f db/migrations/001_initial_schema.up.sql
-psql "postgresql://veridoc:veridoc@localhost:5432/veridoc" -v ON_ERROR_STOP=1 -f db/migrations/002_intake_document_fields.up.sql
+psql "postgresql://verifiedsignal:verifiedsignal@localhost:5432/verifiedsignal" -v ON_ERROR_STOP=1 -f db/migrations/001_initial_schema.up.sql
+psql "postgresql://verifiedsignal:verifiedsignal@localhost:5432/verifiedsignal" -v ON_ERROR_STOP=1 -f db/migrations/002_intake_document_fields.up.sql
 ```
 
 Rollback (destructive):
