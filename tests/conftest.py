@@ -2,10 +2,41 @@
 
 from __future__ import annotations
 
+import asyncio
 import shutil
 from pathlib import Path
 
 import pytest
+
+
+@pytest.fixture
+def api_client(monkeypatch):
+    """
+    FastAPI TestClient with fake job queue and DB health stubbed.
+    Cleans ARQ pool / engine / event hub after each test.
+    """
+    monkeypatch.setenv("USE_FAKE_QUEUE", "true")
+
+    from app.core.config import reset_settings_cache
+    from app.db.session import reset_engine
+    from app.main import create_app
+    from app.services.event_service import reset_event_hub
+    from app.services.queue_backend import close_job_queue
+
+    reset_settings_cache()
+    # Patch where the route module binds the name (not only db.session).
+    monkeypatch.setattr("app.api.routes.health.check_database_connection", lambda: True)
+
+    from fastapi.testclient import TestClient
+
+    application = create_app()
+    with TestClient(application) as client:
+        yield client
+
+    asyncio.run(close_job_queue())
+    reset_engine()
+    reset_event_hub()
+    reset_settings_cache()
 
 
 @pytest.fixture(scope="session")

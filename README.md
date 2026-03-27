@@ -1,24 +1,24 @@
 # veridoc
 
-A document intelligence platform. This repository uses **Python** with **[PDM](https://pdm-project.org/latest/)** for dependencies, a **Makefile** for setup and common tasks, and **Docker Compose** to run the app and local infrastructure in containers.
+A document intelligence platform. This repository uses **Python** with **[PDM](https://pdm-project.org/latest/)** for dependencies, a **Makefile** for setup and common tasks, and **Docker Compose** for local infrastructure. **PostgreSQL** is the system-of-record; **OpenSearch** is a derived, disposable index; a **FastAPI** service exposes synchronous HTTP + **SSE**; an **ARQ** worker runs async background jobs on **Redis**.
 
 ## What’s included so far
 
 This repo is an **early scaffold** with the following in place:
 
-- **Application** — Python **3.11+**, `src/veridoc/` package layout, a small **CLI** (`pdm run python -m veridoc`, `pdm run veridoc`, `--config-dir` / `VERIDOC_CONFIG_DIR`).
-- **PDM** — `pyproject.toml`, committed **`pdm.lock`**, **`pdm-backend`** build, dev tools in the **`dev`** dependency group (**pytest**, **pytest-cov**, **ruff**).
-- **Makefile** — `setup`, `lock` / `sync`, `test` / `test-unit` / `test-integration` / `test-e2e`, `lint`, `format`, `clean`, `config`, `resources` (placeholder), and Docker-related targets.
-- **Tests** — **`pytest`** with markers **`unit`**, **`integration`** (Postgres + migrations via **`DATABASE_URL`**), **`e2e`** (Compose file validation). Dev dependency **`psycopg`** for DB integration tests. See **[`tests/README.md`](tests/README.md)**.
-- **CI** — **[`.github/workflows/ci.yml`](.github/workflows/ci.yml)** runs Ruff, applies migrations to a **Postgres 16** service, runs **unit + integration** tests, then **e2e** (`docker compose config`).
-- **Docker** — **`Dockerfile`** (Python 3.12, PDM, `pdm install --frozen`), **`.dockerignore`**.
-- **Docker Compose** — local stack:
-  - **PostgreSQL** — canonical relational data  
-  - **Redis** — pub/sub, cache, worker coordination (AOF on)  
-  - **MinIO** — S3-compatible object storage (API + console)  
-  - **OpenSearch** + **OpenSearch Dashboards** — search/analytics UI  
-  - **app** — veridoc container (waits for infra health checks)  
-  - **test** — pytest in a one-off container (**profile:** `test`, not started by default)
+- **CLI package** — Python **3.11+**, `src/veridoc/`, small CLI (`pdm run python -m veridoc`, `pdm run veridoc`).
+- **HTTP API** — root package **`app/`**: **FastAPI** (`app/main.py`), **`/api/v1`** routes for health, info, document submission (enqueue), search stub, and **SSE** (`/api/v1/events/stream`). **SQLAlchemy** session factory for Postgres (`app/db/session.py`); placeholder auth (`app/auth/placeholder.py`).
+- **Worker** — root package **`worker/`**: **[ARQ](https://arq-docs.helpmanual.io/)** worker on Redis (`pdm run worker`), `process_document` task with **simulated pipeline stages** (`worker/pipeline.py`). Intended to evolve into real ingestion, scoring, and OpenSearch indexing (all driven from Postgres truth).
+- **PDM** — `pyproject.toml`, **`pdm.lock`**, scripts: **`pdm run api`** (uvicorn reload), **`pdm run api-prod`**, **`pdm run worker`**, dev group (**pytest**, **ruff**, etc.).
+- **Makefile** — `setup`, `lock` / `sync`, `test` / `test-unit` / `test-integration` / `test-e2e` / **`test-api`**, `lint`, `format`, Docker targets.
+- **Tests** — **`pytest`** markers: **`unit`**, **`integration`**, **`e2e`**, **`api`**. See **[`tests/README.md`](tests/README.md)**.
+- **CI** — **[`.github/workflows/ci.yml`](.github/workflows/ci.yml)** — Ruff on `src`, `tests`, `app`, `worker`; Postgres **16** + migrations; **`pdm run pytest`** (full suite).
+- **Docker** — **`Dockerfile`** copies `app/`, `worker/`, `src/`, `tests/`, `db/`, sets **`PYTHONPATH=/app`**, default CMD **`api-prod`** (uvicorn).
+- **Docker Compose** — infra + runtimes:
+  - **PostgreSQL**, **Redis**, **MinIO**, **OpenSearch**, **Dashboards**
+  - **`app`** — FastAPI on **`8000`** (depends on **postgres** + **redis**)
+  - **`worker`** — ARQ consumer (depends on **redis**)
+  - **`test`** — pytest (**profile:** `test`)
 - **Configuration** — **`.env.example`** (ports, DB/Redis/S3/OpenSearch URLs), **`config/application.example.yml`**, **`config/`** mounted read-only into the app container.
 - **Canonical database schema** — SQL migrations under **`db/migrations/`** (users, organizations, collections, documents, sources, pipeline runs/events, document scores). See **[`db/README.md`](db/README.md)** for how to apply them and architectural notes (Postgres as source of truth, OpenSearch as disposable index).
 
@@ -60,7 +60,58 @@ This repo is an **early scaffold** with the following in place:
    make lint
    ```
 
-   Integration tests need **`DATABASE_URL`** and an applied migration (see [`tests/README.md`](tests/README.md)). Without that, `make test` still passes by **skipping** integration cases.
+   Integration tests: **schema** tests need **`DATABASE_URL`** and migrations; **API route** tests use stubs and always run. See [`tests/README.md`](tests/README.md).
+
+## HTTP API and worker (local)
+
+**Why separate runtimes?** The API process optimizes for **low-latency request/response**, **SSE**, and **auth** at the edge. Workers optimize for **long-running**, **CPU/IO-heavy** steps (extract, score, bulk index) without blocking clients. Redis/ARQ decouples them so you can scale API and worker tiers independently and restart workers without dropping HTTP availability.
+
+**How this evolves toward production ingestion:** `POST /api/v1/documents` will persist rows in Postgres (`documents`, `document_sources`, `pipeline_runs`), then enqueue **`process_document`**. The worker will read/write the canonical schema, emit **`pipeline_events`**, write **`document_scores`**, push derived fields to **OpenSearch** (rebuildable from Postgres), and optionally publish to **Redis pub/sub** to feed SSE across multiple API instances (today’s `EventHub` is in-memory for a single process).
+
+### Run the API (uvicorn)
+
+From the repo root (PDM puts the project on `PYTHONPATH`):
+
+```bash
+make setup
+export DATABASE_URL=postgresql://veridoc:veridoc@localhost:5432/veridoc   # optional; /health checks DB
+export REDIS_URL=redis://localhost:6379/0
+# Optional: no Redis for quick tries — in-memory queue (worker will not see jobs)
+export USE_FAKE_QUEUE=true
+
+pdm run api
+# → http://127.0.0.1:8000/api/v1/health
+```
+
+Production-style (no reload):
+
+```bash
+pdm run api-prod
+```
+
+### Run the worker (ARQ)
+
+Requires **Redis** and **`USE_FAKE_QUEUE` unset/false** for the API when you want real enqueue:
+
+```bash
+export REDIS_URL=redis://localhost:6379/0
+pdm run worker
+```
+
+### Minimal API checks
+
+```bash
+curl -s http://127.0.0.1:8000/api/v1/health | jq
+curl -s -X POST http://127.0.0.1:8000/api/v1/documents \
+  -H 'Content-Type: application/json' \
+  -d '{"title":"Demo","source_uri":"https://example.com/x","metadata":{}}' | jq
+```
+
+SSE (example — streams until you Ctrl+C):
+
+```bash
+curl -N http://127.0.0.1:8000/api/v1/events/stream
+```
 
 ## Useful commands
 
@@ -76,7 +127,8 @@ This repo is an **early scaffold** with the following in place:
 | `make test` | Pytest (unit + e2e; integration skips if `DATABASE_URL` unset) |
 | `make test-unit` | `pytest -m unit` |
 | `make test-integration` | `pytest -m integration` (requires `DATABASE_URL` + migrations) |
-| `make test-e2e` | `pytest -m e2e` (requires `docker` on `PATH`) |
+| `make test-e2e` | `pytest -m e2e` (Docker compose config + ASGI smoke; compose test needs `docker` on `PATH`) |
+| `make test-api` | `pytest -m api` |
 | `make lint` | Ruff check |
 | `make format` | Ruff format |
 | `make clean` | Drop local build/caches (`.pytest_cache`, `.ruff_cache`, etc.) |
@@ -87,8 +139,10 @@ This repo is an **early scaffold** with the following in place:
 | `pdm run pytest` | Same as `make test` |
 | `pdm run pytest -m "unit or integration"` | Typical CI subset (with `DATABASE_URL` set) |
 | `pdm run pytest --cov=veridoc` | Tests with coverage (pytest-cov installed) |
-| `pdm run ruff check src tests` | Same as `make lint` |
-| `pdm run ruff format src tests` | Same as `make format` |
+| `pdm run api` / `pdm run api-prod` | Uvicorn (`app.main:app`) |
+| `pdm run worker` | ARQ worker (`worker.main.WorkerSettings`) |
+| `pdm run ruff check src tests app worker` | Same as `make lint` |
+| `pdm run ruff format src tests app worker` | Same as `make format` |
 
 ### Docker and Compose
 
@@ -104,12 +158,13 @@ This repo is an **early scaffold** with the following in place:
 |--------|---------|
 | `docker compose up -d` | Full stack in the **background** |
 | `docker compose up -d postgres redis minio opensearch opensearch-dashboards` | **Infrastructure only** (no `app` container) |
-| `docker compose up -d --build app` | Rebuild and start **app** plus its dependencies |
+| `docker compose up -d --build app worker` | API + worker + their dependencies |
 | `docker compose ps` | Service status |
 | `docker compose logs -f app` | Follow logs for `app` (replace `app` with any service name) |
 | `docker compose logs -f opensearch opensearch-dashboards` | Follow OpenSearch-related logs |
 | `docker compose --profile test run --rm test` | Pytest container without going through Make |
-| `docker compose run --rm app pdm run veridoc -- --help` | One-off command inside the app image |
+| `docker compose run --rm app pdm run veridoc -- --help` | Legacy CLI inside the app image |
+| `docker compose logs -f worker` | Worker logs |
 | `docker compose down -v` | Stop and **remove named volumes** (wipes Postgres/Redis/MinIO/OpenSearch data) |
 | `docker compose pull` | Pull newer infra images (MinIO, OpenSearch, etc.) |
 | `docker compose exec -T postgres psql -U veridoc -d veridoc -v ON_ERROR_STOP=1 < db/migrations/001_initial_schema.up.sql` | Apply initial DB schema (from repo root; see [`db/README.md`](db/README.md)) |
@@ -124,6 +179,7 @@ This repo is an **early scaffold** with the following in place:
 | OpenSearch Dashboards | [http://localhost:5601](http://localhost:5601) |
 | PostgreSQL | `localhost:5432` |
 | Redis | `localhost:6379` |
+| Veridoc API (Compose `app`) | [http://localhost:8000](http://localhost:8000) (`/api/v1/...`) |
 
 ## Makefile reference
 
@@ -144,7 +200,7 @@ Run `make` or `make help` to print this list from the Makefile.
 | `make config` | Copies `.env.example` → `.env` only if `.env` is missing |
 | `make resources` | Placeholder for future asset or download steps |
 | `make docker-build` | `docker compose build` |
-| `make docker-up` | `make config`, then **`docker compose up --build`** (Postgres, Redis, MinIO, OpenSearch, Dashboards, **app**) |
+| `make docker-up` | `make config`, then **`docker compose up --build`** (full stack: infra + **app** + **worker**) |
 | `make docker-down` | `docker compose down` |
 | `make docker-test` | `make config`, build image, then run the `test` service (pytest in Docker) |
 | `make docker-run` | `make config`, build image, then one-off `app` container |
@@ -161,8 +217,8 @@ pdm lock                 # update pdm.lock after changing pyproject.toml
 pdm add <package>        # add a runtime dependency
 pdm add -dG dev <pkg>    # add a dev dependency to the `dev` group
 pdm run pytest
-pdm run ruff check src tests
-pdm run ruff format src tests
+pdm run ruff check src tests app worker
+pdm run ruff format src tests app worker
 ```
 
 Runtime dependencies live under `[project]` in `pyproject.toml`. Development tools (pytest, ruff, etc.) live in `[dependency-groups]` under `dev`.
@@ -178,10 +234,11 @@ The stack is defined in `docker-compose.yml`. **`make docker-up`** (or `docker c
 | **minio** | S3-compatible object storage (API + web console) | `9000` (API), `9001` (console) |
 | **opensearch** | Search and analytics (single-node; `DISABLE_SECURITY_PLUGIN=true` for local dev only) | `9200` |
 | **opensearch-dashboards** | OpenSearch Dashboards UI | `5601` |
-| **app** | veridoc application (`pdm run python -m veridoc`) | (none; use `docker compose logs`) |
+| **app** | **FastAPI** (`pdm run api-prod` → uvicorn `app.main:app`) | **`8000`** → `API_PORT` |
+| **worker** | **ARQ** consumer (`pdm run worker`) | — |
 | **test** | Runs `pytest` in a one-off container (`profile: test`) | — |
 
-The **app** service waits for **postgres**, **redis**, **minio**, and **opensearch** to pass their health checks before starting. Connection defaults are wired through environment variables (see **`.env.example`**); inside the Compose network the app receives URLs such as `postgresql://…@postgres:5432/…`, `redis://redis:6379/0`, `http://minio:9000`, and `http://opensearch:9200`.
+The **app** service waits for **postgres** and **redis** only (MinIO/OpenSearch are optional for the current API scaffold). Env vars follow **`.env.example`** (`DATABASE_URL`, `REDIS_URL`, `USE_FAKE_QUEUE`, etc.).
 
 **OpenSearch:** the cluster runs with the security plugin disabled via `DISABLE_SECURITY_PLUGIN=true` in Compose—suitable only for trusted local machines; do not expose these ports on a network. On **Linux**, if the node fails to start, raise `vm.max_map_count` (for example `sudo sysctl -w vm.max_map_count=262144`). See the [OpenSearch Docker install notes](https://opensearch.org/docs/latest/install-and-configure/install-opensearch/docker/).
 
@@ -210,12 +267,14 @@ Do not commit secrets. `.env` is gitignored.
 ├── .env.example
 ├── pyproject.toml
 ├── pdm.lock
-├── .github/workflows/      # CI (Postgres service + pytest + ruff + e2e)
+├── .github/workflows/      # CI (Postgres + migrations + pytest + ruff)
+├── app/                    # FastAPI (API routes, services, db session, schemas)
+├── worker/                 # ARQ worker (tasks, pipeline scaffold)
 ├── db/
 │   ├── README.md           # schema docs + apply/rollback examples
 │   └── migrations/         # *.up.sql / *.down.sql
-├── src/veridoc/            # application package
-├── tests/                  # pytest (unit / integration / e2e); see tests/README.md
+├── src/veridoc/            # CLI package
+├── tests/                  # pytest; see tests/README.md
 └── config/                 # runtime configuration (mounted in Docker)
 ```
 

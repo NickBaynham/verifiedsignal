@@ -4,33 +4,31 @@ Pytest is organized by **markers** (see `pyproject.toml`):
 
 | Marker | Scope | Requirements |
 |--------|--------|----------------|
-| **`unit`** | CLI, package metadata, migration files on disk | None |
-| **`integration`** | Postgres schema metadata, FKs, CHECKs, unique partial index | **`DATABASE_URL`** pointing at Postgres where **`001_initial_schema.up.sql`** has been applied |
-| **`e2e`** | `docker compose config` | **`docker`** on `PATH` |
+| **`unit`** | CLI, package metadata, migrations on disk, worker pipeline sim, event hub, document queue | None |
+| **`integration`** | Postgres schema **or** FastAPI routes (with stubbed DB health + fake queue via `api_client`) | Schema tests: **`DATABASE_URL`** + applied migrations. API route tests: none (fixture stubs infra). |
+| **`e2e`** | `docker compose config` + ASGI smoke (`test_api_http`) | **`docker`** on `PATH` for compose test only |
+| **`api`** | ASGI smoke (`TestClient`, multi-route) | None |
 
 ## Commands
 
 ```bash
-make test                 # everything pytest collects (integration skips without DATABASE_URL)
+make test                 # full pytest (skips only what markers/env exclude)
 make test-unit
-make test-integration     # export DATABASE_URL=... first; see below
+make test-integration
 make test-e2e
+make test-api
 ```
 
 ## Integration tests and Postgres
 
-Integration tests connect with **`psycopg`** using **`DATABASE_URL`**. They **do not** apply migrations; your pipeline (or you locally) must run the SQL in `db/migrations/` first.
+Schema integration tests (`test_schema_*.py`) connect with **`psycopg`** using **`DATABASE_URL`**. They **do not** apply migrations; your pipeline (or you locally) must run the SQL in `db/migrations/` first.
 
-**Local (Compose Postgres on port 5432):** if another Postgres already listens on `5432`, either stop it or map Compose to another host port (e.g. `5433:5432` in `docker-compose.yml`) and set `DATABASE_URL` accordingly.
+API integration tests (`test_api_routes.py`) use the shared **`api_client`** fixture: fake ARQ queue (`USE_FAKE_QUEUE=true`), patched DB health, and cleaned global state after each test.
 
-Example:
+## Integration tests and `api_client`
 
-```bash
-docker compose up -d postgres
-docker compose exec -T postgres psql -U veridoc -d veridoc -v ON_ERROR_STOP=1 \
-  < db/migrations/001_initial_schema.up.sql
-export DATABASE_URL=postgresql://veridoc:veridoc@localhost:5432/veridoc
-make test-integration
-```
+Defined in **`tests/conftest.py`**. Patches **`app.api.routes.health.check_database_connection`** so `/health` reports **ok** without a live Postgres (route modules bind their own reference to that function).
 
-CI applies migrations and runs **`pytest -m "unit or integration"`** — see `.github/workflows/ci.yml`.
+## CI
+
+GitHub Actions runs **`pdm run pytest`** (all markers) plus Ruff on **`src`**, **`tests`**, **`app`**, and **`worker`**.

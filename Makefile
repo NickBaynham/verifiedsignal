@@ -1,4 +1,4 @@
-.PHONY: help setup lock sync install test test-unit test-integration test-e2e lint format clean config resources docker-build docker-up docker-down docker-test docker-run
+.PHONY: help setup lock sync install test test-unit test-integration test-e2e test-api lint format clean config resources docker-build docker-up docker-down docker-test docker-run
 
 # Default Python / PDM (override if needed)
 PYTHON ?= python3
@@ -16,6 +16,7 @@ help:
 	@echo "  make test-unit   Run pytest -m unit only"
 	@echo "  make test-integration  Run pytest -m integration (needs DATABASE_URL + migrations)"
 	@echo "  make test-e2e    Run pytest -m e2e (needs docker on PATH)"
+	@echo "  make test-api    Run pytest -m api (ASGI smoke tests)"
 	@echo "  make lint        Run ruff check"
 	@echo "  make format      Run ruff format"
 	@echo "  make clean       Remove build and cache artifacts"
@@ -51,11 +52,14 @@ test-integration:
 test-e2e:
 	$(PDM) run pytest -m e2e
 
+test-api:
+	$(PDM) run pytest -m api
+
 lint:
-	$(PDM) run ruff check src tests
+	$(PDM) run ruff check src tests app worker
 
 format:
-	$(PDM) run ruff format src tests
+	$(PDM) run ruff format src tests app worker
 
 clean:
 	rm -rf .pytest_cache .ruff_cache .pdm-build dist build

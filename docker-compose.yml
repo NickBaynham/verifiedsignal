@@ -98,26 +98,43 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-      minio:
-        condition: service_healthy
-      opensearch:
-        condition: service_healthy
     env_file:
       - path: .env
         required: false
     environment:
+      PYTHONPATH: /app
       VERIDOC_CONFIG_DIR: /app/config
       DATABASE_URL: ${DATABASE_URL:-postgresql://veridoc:veridoc@postgres:5432/veridoc}
       REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+      VERIDOC_ARQ_QUEUE: ${VERIDOC_ARQ_QUEUE:-veridoc:jobs}
+      USE_FAKE_QUEUE: ${USE_FAKE_QUEUE:-false}
       S3_ENDPOINT_URL: ${S3_ENDPOINT_URL:-http://minio:9000}
       AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-minioadmin}
       AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-minioadmin}
       AWS_DEFAULT_REGION: ${AWS_DEFAULT_REGION:-us-east-1}
       S3_BUCKET: ${S3_BUCKET:-veridoc}
       OPENSEARCH_URL: ${OPENSEARCH_URL:-http://opensearch:9200}
+    ports:
+      - "${API_PORT:-8000}:8000"
     volumes:
       - ./config:/app/config:ro
-    command: ["pdm", "run", "python", "-m", "veridoc"]
+    command: ["pdm", "run", "api-prod"]
+
+  worker:
+    build: .
+    image: veridoc:local
+    depends_on:
+      redis:
+        condition: service_healthy
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      PYTHONPATH: /app
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+      VERIDOC_ARQ_QUEUE: ${VERIDOC_ARQ_QUEUE:-veridoc:jobs}
+      WORKER_LOG_LEVEL: ${WORKER_LOG_LEVEL:-INFO}
+    command: ["pdm", "run", "worker"]
 
   test:
     build: .
@@ -128,6 +145,7 @@ services:
       - path: .env
         required: false
     environment:
+      PYTHONPATH: /app
       VERIDOC_CONFIG_DIR: /app/config
     volumes:
       - ./config:/app/config:ro

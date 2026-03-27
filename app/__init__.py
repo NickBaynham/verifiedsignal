@@ -1,0 +1,1 @@
+"""Veridoc FastAPI application package."""

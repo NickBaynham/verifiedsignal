@@ -49,10 +49,7 @@ jobs:
             -f db/migrations/001_initial_schema.up.sql
 
       - name: Ruff
-        run: pdm run ruff check src tests
+        run: pdm run ruff check src tests app worker
 
-      - name: Unit and integration tests
-        run: pdm run pytest -m "unit or integration" -v --tb=short
-
-      - name: E2E (Docker Compose config)
-        run: pdm run pytest -m e2e -v --tb=short
+      - name: Tests
+        run: pdm run pytest -v --tb=short
