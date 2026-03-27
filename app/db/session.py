@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Generator
 
 from sqlalchemy import create_engine, text
-from sqlalchemy.engine import Engine
+from sqlalchemy.engine import Engine, make_url
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.core.config import get_settings
@@ -14,10 +14,18 @@ _engine: Engine | None = None
 _SessionLocal: sessionmaker[Session] | None = None
 
 
+def _sqlalchemy_url_for_psycopg3(url: str) -> str:
+    """Use psycopg3 for generic postgresql:// URLs (SQLAlchemy defaults to psycopg2)."""
+    parsed = make_url(url)
+    if parsed.drivername in ("postgresql", "postgres"):
+        return str(parsed.set(drivername="postgresql+psycopg"))
+    return url
+
+
 def get_engine() -> Engine:
     global _engine, _SessionLocal
     if _engine is None:
-        url = get_settings().database_url
+        url = _sqlalchemy_url_for_psycopg3(get_settings().database_url)
         _engine = create_engine(url, pool_pre_ping=True)
         _SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=_engine)
     return _engine
