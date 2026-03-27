@@ -7,7 +7,7 @@ A document intelligence platform. This repository uses **Python** with **[PDM](h
 This repo is an **early scaffold** with the following in place:
 
 - **CLI package** — Python **3.11+**, `src/veridoc/`, small CLI (`pdm run python -m veridoc`, `pdm run veridoc`).
-- **HTTP API** — root package **`app/`**: **FastAPI** (`app/main.py`), **`/api/v1`** routes for health, info, document submission (enqueue), search stub, and **SSE** (`/api/v1/events/stream`). **SQLAlchemy** session factory for Postgres (`app/db/session.py`); placeholder auth (`app/auth/placeholder.py`).
+- **HTTP API** — root package **`app/`**: **FastAPI** (`app/main.py`), **`/api/v1`** routes for health, info, **Phase 1 document intake** (`POST /api/v1/documents` multipart upload → Postgres + MinIO/S3 + ARQ), search stub, and **SSE** (`/api/v1/events/stream`). **SQLAlchemy** session factory for Postgres (`app/db/session.py`); placeholder auth (`app/auth/placeholder.py`).
 - **Worker** — root package **`worker/`**: **[ARQ](https://arq-docs.helpmanual.io/)** worker on Redis (`pdm run worker`), `process_document` task with **simulated pipeline stages** (`worker/pipeline.py`). Intended to evolve into real ingestion, scoring, and OpenSearch indexing (all driven from Postgres truth).
 - **PDM** — `pyproject.toml`, **`pdm.lock`**, scripts: **`pdm run api`** (uvicorn reload), **`pdm run api-prod`**, **`pdm run worker`**, dev group (**pytest**, **ruff**, etc.).
 - **Makefile** — `setup`, `lock` / `sync`, `test` / `test-unit` / `test-integration` / `test-e2e` / **`test-api`**, `lint`, `format`, Docker targets.
@@ -60,13 +60,15 @@ This repo is an **early scaffold** with the following in place:
    make lint
    ```
 
-   Integration tests: **schema** tests need **`DATABASE_URL`** and migrations; **API route** tests use stubs and always run. See [`tests/README.md`](tests/README.md).
+   Integration tests: **schema** and **intake** tests need **`DATABASE_URL`** and migrations **001 + 002**; lightweight **API route** tests use stubs and always run. See [`tests/README.md`](tests/README.md).
 
 ## HTTP API and worker (local)
 
 **Why separate runtimes?** The API process optimizes for **low-latency request/response**, **SSE**, and **auth** at the edge. Workers optimize for **long-running**, **CPU/IO-heavy** steps (extract, score, bulk index) without blocking clients. Redis/ARQ decouples them so you can scale API and worker tiers independently and restart workers without dropping HTTP availability.
 
-**How this evolves toward production ingestion:** `POST /api/v1/documents` will persist rows in Postgres (`documents`, `document_sources`, `pipeline_runs`), then enqueue **`process_document`**. The worker will read/write the canonical schema, emit **`pipeline_events`**, write **`document_scores`**, push derived fields to **OpenSearch** (rebuildable from Postgres), and optionally publish to **Redis pub/sub** to feed SSE across multiple API instances (today’s `EventHub` is in-memory for a single process).
+**Phase 1 intake (implemented):** `POST /api/v1/documents` accepts **multipart/form-data** with a file. The API validates input, inserts a canonical **`documents`** row in **`created`**, uploads bytes to **S3-compatible storage** (MinIO locally) under `raw/{document_id}/{safe_filename}`, updates the row to **`queued`**, inserts **`document_sources`** with an `s3://{bucket}/{key}` locator, then enqueues **`process_document`** on ARQ. If enqueue fails, the row stays **`queued`** with **`enqueue_error`** set; the object and Postgres metadata are kept.
+
+**Still stubbed / later stages:** extraction, LLM scoring, OpenSearch indexing, full **`pipeline_runs`** wiring, and durable cross-instance SSE (today’s **`EventHub`** is in-process).
 
 ### Run the API (uvicorn)
 
@@ -74,10 +76,19 @@ From the repo root (PDM puts the project on `PYTHONPATH`):
 
 ```bash
 make setup
-export DATABASE_URL=postgresql://veridoc:veridoc@localhost:5432/veridoc   # optional; /health checks DB
+export DATABASE_URL=postgresql://veridoc:veridoc@localhost:5432/veridoc
+# Apply migrations 001 + 002 (intake columns + default collection seed) — see db/README.md
 export REDIS_URL=redis://localhost:6379/0
-# Optional: no Redis for quick tries — in-memory queue (worker will not see jobs)
+# MinIO / S3 (omit and set USE_FAKE_STORAGE=true to store bytes in-memory only)
+export S3_ENDPOINT_URL=http://127.0.0.1:9000
+export AWS_ACCESS_KEY_ID=minioadmin
+export AWS_SECRET_ACCESS_KEY=minioadmin
+export S3_BUCKET=veridoc
+export S3_USE_PATH_STYLE=true
+# Optional: no Redis — in-memory queue (worker will not see jobs)
 export USE_FAKE_QUEUE=true
+# Optional: no MinIO — keep objects in-process only (good for quick API tries)
+# export USE_FAKE_STORAGE=true
 
 pdm run api
 # → http://127.0.0.1:8000/api/v1/health
@@ -98,13 +109,29 @@ export REDIS_URL=redis://localhost:6379/0
 pdm run worker
 ```
 
+### MinIO locally (object storage)
+
+Start MinIO (Docker example):
+
+```bash
+docker run -d --name minio -p 9000:9000 -p 9001:9001 \
+  -e MINIO_ROOT_USER=minioadmin -e MINIO_ROOT_PASSWORD=minioadmin \
+  quay.io/minio/minio server /data --console-address ":9001"
+```
+
+Create the **`veridoc`** bucket once (Console at [http://127.0.0.1:9001](http://127.0.0.1:9001), or **`mc`**). The **`S3ObjectStorage`** adapter attempts **`create_bucket`** if **`head_bucket`** reports a missing bucket (simple dev convenience; production often provisions buckets out-of-band).
+
+Point the API at MinIO with **`S3_ENDPOINT_URL`** (e.g. `http://127.0.0.1:9000`) and **`S3_USE_PATH_STYLE=true`**.
+
 ### Minimal API checks
 
 ```bash
 curl -s http://127.0.0.1:8000/api/v1/health | jq
 curl -s -X POST http://127.0.0.1:8000/api/v1/documents \
-  -H 'Content-Type: application/json' \
-  -d '{"title":"Demo","source_uri":"https://example.com/x","metadata":{}}' | jq
+  -F "file=@./README.md;type=text/markdown" \
+  -F "title=Demo upload" | jq
+# Optional explicit collection (otherwise VERIDOC_DEFAULT_COLLECTION_ID / seeded default-inbox)
+# -F "collection_id=00000000-0000-4000-8000-000000000002"
 ```
 
 SSE (example — streams until you Ctrl+C):

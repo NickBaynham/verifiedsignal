@@ -8,6 +8,8 @@ This directory holds **canonical** schema definitions for Veridoc. The applicati
 |------|---------|
 | `migrations/001_initial_schema.up.sql` | Creates core tables, indexes, constraints, and the shared `updated_at` trigger. |
 | `migrations/001_initial_schema.down.sql` | Drops those objects (destructive). |
+| `migrations/002_intake_document_fields.up.sql` | Intake columns on **`documents`**, expanded **`documents.status`** check, **`document_sources`**-ready lifecycle; seeds **`local-dev`** org and **`default-inbox`** collection for local UUIDs. |
+| `migrations/002_intake_document_fields.down.sql` | Rollback (destructive; removes seeded rows by id/slug). |
 
 ### Applying manually
 
@@ -22,6 +24,7 @@ Or from a host with `psql`:
 
 ```bash
 psql "postgresql://veridoc:veridoc@localhost:5432/veridoc" -v ON_ERROR_STOP=1 -f db/migrations/001_initial_schema.up.sql
+psql "postgresql://veridoc:veridoc@localhost:5432/veridoc" -v ON_ERROR_STOP=1 -f db/migrations/002_intake_document_fields.up.sql
 ```
 
 Rollback (destructive):

@@ -15,3 +15,17 @@ class DocumentSubmitResponse(BaseModel):
     document_id: str
     job_id: str
     status: str
+
+
+class IntakeResponse(BaseModel):
+    """
+    Response after successful file intake.
+
+    Row is `queued` once storage and DB finalize succeeded.
+    """
+
+    document_id: str
+    status: str
+    storage_key: str
+    job_id: str | None = None
+    enqueue_error: str | None = None

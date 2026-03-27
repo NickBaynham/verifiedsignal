@@ -24,19 +24,6 @@ def test_info(api_client):
 
 
 @pytest.mark.integration
-def test_submit_document_returns_ids(api_client):
-    r = api_client.post(
-        "/api/v1/documents",
-        json={"title": "Paper", "source_uri": "https://example.com/a.pdf", "metadata": {}},
-    )
-    assert r.status_code == 200
-    data = r.json()
-    assert data["status"] == "queued"
-    assert data["document_id"]
-    assert data["job_id"]
-
-
-@pytest.mark.integration
 def test_search_stub(api_client):
     r = api_client.get("/api/v1/search", params={"q": "truth", "limit": 5})
     assert r.status_code == 200

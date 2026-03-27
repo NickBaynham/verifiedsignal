@@ -9,6 +9,7 @@ from fastapi import FastAPI
 from app.api.routes import documents, events, health, info, search
 from app.core.config import get_settings
 from app.services.queue_backend import close_job_queue
+from app.services.storage_service import reset_object_storage
 
 
 @asynccontextmanager
@@ -16,6 +17,7 @@ async def lifespan(app: FastAPI):
     _ = app
     yield
     await close_job_queue()
+    reset_object_storage()
 
 
 def create_app() -> FastAPI:

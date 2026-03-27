@@ -1,0 +1,35 @@
+"""Unit tests: object key helpers and in-memory storage adapter."""
+
+from __future__ import annotations
+
+import uuid
+
+import pytest
+from app.services.storage_service import (
+    InMemoryObjectStorage,
+    build_raw_object_key,
+    sanitize_filename,
+)
+
+
+@pytest.mark.unit
+def test_sanitize_filename_strips_path_and_chars():
+    assert sanitize_filename("dir/sub/file_name!.txt") == "file_name_.txt"
+    assert sanitize_filename("  ") == "unnamed"
+
+
+@pytest.mark.unit
+def test_build_raw_object_key_shape():
+    did = uuid.UUID("00000000-0000-4000-8000-000000000099")
+    key = build_raw_object_key(did, "My File (1).pdf")
+    assert key.startswith(f"raw/{did}/")
+    assert key.endswith(".pdf")
+
+
+@pytest.mark.unit
+def test_in_memory_storage_roundtrip():
+    store = InMemoryObjectStorage(bucket="b1")
+    store.ensure_bucket()
+    store.upload_bytes("raw/x/y.txt", b"abc", "text/plain")
+    assert store.objects["raw/x/y.txt"] == b"abc"
+    assert store.bucket == "b1"

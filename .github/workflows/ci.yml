@@ -47,6 +47,8 @@ jobs:
           until pg_isready -h localhost -p 5432 -U veridoc; do sleep 1; done
           PGPASSWORD=veridoc psql -h localhost -U veridoc -d veridoc -v ON_ERROR_STOP=1 \
             -f db/migrations/001_initial_schema.up.sql
+          PGPASSWORD=veridoc psql -h localhost -U veridoc -d veridoc -v ON_ERROR_STOP=1 \
+            -f db/migrations/002_intake_document_fields.up.sql
 
       - name: Ruff
         run: pdm run ruff check src tests app worker
