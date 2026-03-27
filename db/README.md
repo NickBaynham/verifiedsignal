@@ -1,0 +1,73 @@
+# Veridoc database (PostgreSQL)
+
+This directory holds **canonical** schema definitions for Veridoc. The application treats **PostgreSQL as the write master and system-of-record**. OpenSearch (or Elasticsearch) is a **derived search layer** only.
+
+## Migrations
+
+| File | Purpose |
+|------|---------|
+| `migrations/001_initial_schema.up.sql` | Creates core tables, indexes, constraints, and the shared `updated_at` trigger. |
+| `migrations/001_initial_schema.down.sql` | Drops those objects (destructive). |
+
+### Applying manually
+
+With Docker Compose Postgres (from the repo root):
+
+```bash
+docker compose up -d postgres
+docker compose exec -T postgres psql -U veridoc -d veridoc -v ON_ERROR_STOP=1 < db/migrations/001_initial_schema.up.sql
+```
+
+Or from a host with `psql`:
+
+```bash
+psql "postgresql://veridoc:veridoc@localhost:5432/veridoc" -v ON_ERROR_STOP=1 -f db/migrations/001_initial_schema.up.sql
+```
+
+Rollback (destructive):
+
+```bash
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f db/migrations/001_initial_schema.down.sql
+```
+
+Use a migration runner (Flyway, Sqitch, Alembic raw SQL, etc.) in production; these files are the **source of truth** for the DDL.
+
+After migrations are applied, **`pytest -m integration`** (see [`tests/README.md`](../tests/README.md)) validates tables and constraints against **`DATABASE_URL`**.
+
+## Schema overview
+
+### Entities
+
+- **users** — Actors in the system; **organization_members** links users to **organizations** with a role (`owner`, `admin`, `member`, `viewer`).
+- **organizations** — Tenant boundary; owns **collections**.
+- **collections** — Groups **documents** under an org (`UNIQUE (organization_id, slug)`).
+- **documents** — Logical documents; intended OpenSearch document id = `documents.id` for straightforward full reindex.
+- **document_sources** — Many sources per document (URL, upload, API, etc.) with `raw_metadata` JSONB.
+- **pipeline_runs** — One pipeline execution per document (name/version, `status`, `stage`, timing, errors).
+- **pipeline_events** — Append-style log lines per run (`step_index` + `event_type` + `payload` JSONB).
+- **document_scores** — Time series of scores per document; **at most one** `is_canonical = true` row per document (partial unique index). Promoted numeric columns (`factuality_score`, `ai_generation_probability`, `fallacy_score`, `confidence_score`) are all on **[0, 1]** when present; **`score_payload`** JSONB holds extra model output.
+
+### Design choices
+
+- **UUID primary keys** — Safe generation across services; stable public identifiers for sync to search.
+- **TEXT + CHECK** for statuses/stages — Adding a new value is a small, explicit migration without enum type surgery.
+- **`created_at` / `updated_at`** — Auditing and incremental export windows; trigger keeps `updated_at` consistent.
+- **JSONB** — `metadata`, `raw_metadata`, `run_metadata`, `error_detail`, `payload`, `score_payload` for evolution without wide nullable columns for every new field.
+- **`score_schema_version` / `row_schema_version` / `definition_schema_version`** — Lets application code branch on row semantics during rolling upgrades.
+
+### Why Postgres is canonical
+
+All durable business facts—who owns what, document identity, provenance, pipeline outcomes, and scoring history—live here with **ACID transactions** and **referential integrity**. If OpenSearch diverges or is wiped, you can **rebuild the index** by reading documents (plus denormalized fields you choose to project, e.g. canonical scores) and re-running indexing logic.
+
+### Why the search index is disposable
+
+OpenSearch holds **inverted indices and denormalized projections** for search relevance and aggregations. None of that is authoritative: it can drift, lag, or be corrupted without losing truth, as long as **Postgres + pipeline history** remain intact. Reindex = batch or stream from Postgres (and optionally replay pipeline semantics), not the other way around.
+
+### How this supports reindexing and pipeline auditing
+
+- **Reindexing:** `documents` keyed by UUID; `collections` / `organizations` provide stable partition keys. Join to **`document_scores`** where `is_canonical` to project current metrics into the index. Full rebuild = scan or cursor over `documents` (filtered by collection/org) and bulk index.
+- **Pipeline auditing:** **`pipeline_runs`** record attempts and outcomes per document; **`pipeline_events`** capture ordered steps and structured **`payload`**, independent of search. Debugging a bad index row traces back to a specific **run** and **event** trail in Postgres.
+
+### Canonical scores
+
+Only one row per `document_id` may have `is_canonical = true`. When promoting a new score, do it in **one transaction**: set existing canonical rows to `false`, then insert or update the new canonical row. The partial unique index enforces integrity at the database level.

@@ -12,6 +12,7 @@ WORKDIR /app
 COPY pyproject.toml pdm.lock README.md ./
 COPY src ./src
 COPY tests ./tests
+COPY db ./db
 COPY config ./config
 
 RUN pdm install --frozen

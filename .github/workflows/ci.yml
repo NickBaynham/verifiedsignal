@@ -1,0 +1,58 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: veridoc
+          POSTGRES_PASSWORD: veridoc
+          POSTGRES_DB: veridoc
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U veridoc -d veridoc"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=10
+
+    env:
+      DATABASE_URL: postgresql://veridoc:veridoc@localhost:5432/veridoc
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install PDM
+        run: pip install pdm
+
+      - name: Install dependencies
+        run: pdm install
+
+      - name: Wait for Postgres and apply migrations
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client
+          until pg_isready -h localhost -p 5432 -U veridoc; do sleep 1; done
+          PGPASSWORD=veridoc psql -h localhost -U veridoc -d veridoc -v ON_ERROR_STOP=1 \
+            -f db/migrations/001_initial_schema.up.sql
+
+      - name: Ruff
+        run: pdm run ruff check src tests
+
+      - name: Unit and integration tests
+        run: pdm run pytest -m "unit or integration" -v --tb=short
+
+      - name: E2E (Docker Compose config)
+        run: pdm run pytest -m e2e -v --tb=short
