@@ -32,8 +32,8 @@ help:
 	@echo "  make docker-down    Stop app stack"
 	@echo "  make docker-test    Run tests in Docker (compose profile: test)"
 	@echo "  make docker-run     One-off app container run"
-	@echo "  make ci-local       Ephemeral Postgres:16 + migrations + Ruff + pytest (mirrors CI)"
-	@echo "  make ci-local-stop  Remove the ci-local Postgres container"
+	@echo "  make ci-local       Ephemeral Postgres:16 + migrations + Ruff + pytest; removes container after (even on failure)"
+	@echo "  make ci-local-stop  Remove the ci-local Postgres container (manual cleanup)"
 
 setup: config
 	@command -v $(PDM) >/dev/null 2>&1 || { echo "Install PDM: https://pdm-project.org/latest/#installation"; exit 1; }
@@ -110,6 +110,11 @@ ci-local-migrate: ci-local-postgres
 	docker exec -i $(CI_LOCAL_PG_CONTAINER) psql -U verifiedsignal -d verifiedsignal -v ON_ERROR_STOP=1 \
 		< db/migrations/002_intake_document_fields.up.sql
 
-ci-local: ci-local-migrate
-	env DATABASE_URL='$(CI_LOCAL_PG_URL)' $(PDM) run python -m ruff check src tests app worker
+# One shell so EXIT trap runs after postgres is up: always remove container (success, ruff/pytest failure, or migrate failure).
+ci-local:
+	set -e; \
+	$(MAKE) ci-local-postgres; \
+	trap 'docker rm -f $(CI_LOCAL_PG_CONTAINER) 2>/dev/null || true' EXIT; \
+	$(MAKE) ci-local-migrate; \
+	env DATABASE_URL='$(CI_LOCAL_PG_URL)' $(PDM) run python -m ruff check src tests app worker; \
 	env DATABASE_URL='$(CI_LOCAL_PG_URL)' $(PDM) run python -m pytest -v --tb=short

@@ -81,8 +81,8 @@ Integration tests that need a database are skipped unless **`DATABASE_URL`** is 
 
 ```bash
 make setup          # once: dependencies + .env from example if missing
-make ci-local       # (re)starts a throwaway container, migrates, runs lint + pytest -v --tb=short
-make ci-local-stop  # remove the ci-local container when finished
+make ci-local       # ephemeral Postgres + migrations + lint + pytest; **removes the container when done** (including on failure)
+make ci-local-stop  # optional: remove the container if you started Postgres without a full ci-local run
 ```
 
 - Requires **Docker** on your `PATH` and port **`5432`** free on the host. If something else already uses **5432** (for example Compose Postgres), pick another port:
@@ -91,7 +91,7 @@ make ci-local-stop  # remove the ci-local container when finished
   make ci-local CI_LOCAL_PG_PORT=5433
   ```
 
-- **`make ci-local`** removes any existing container named **`verifiedsignal-ci-postgres`** (see **`CI_LOCAL_PG_CONTAINER`** in the Makefile) before starting, so each run gets a clean database.
+- **`make ci-local`** removes any existing container named **`verifiedsignal-ci-postgres`** (see **`CI_LOCAL_PG_CONTAINER`** in the Makefile) before starting, and **removes it again on exit** (success or failure) so the next run is not blocked on the port.
 
 - **`DATABASE_URL` in the process environment** (as set by **`make ci-local`**) takes precedence over **`.env`** for the running app, so SQLAlchemy and **`psycopg`** in tests use the same DSN. If you previously saw “password authentication failed” only on **`POST /documents`** while other integration tests passed, a mismatched **`.env`** was the usual cause.
 
@@ -205,8 +205,8 @@ curl -N http://127.0.0.1:8000/api/v1/events/stream
 | `make lock` | Refresh `pdm.lock` after dependency changes |
 | `make sync` | Install exactly what `pdm.lock` specifies |
 | `make test` | Pytest (unit + e2e; integration skips if `DATABASE_URL` unset) |
-| `make ci-local` | Ephemeral Postgres **16** + migrations **001**/**002** + Ruff + pytest (like CI); needs Docker |
-| `make ci-local-stop` | Remove the **`ci-local`** Postgres container |
+| `make ci-local` | Ephemeral Postgres **16** + migrations **001**/**002** + Ruff + pytest; tears down container when finished (even on failure) |
+| `make ci-local-stop` | Remove the **`ci-local`** Postgres container (e.g. after **`ci-local-postgres`** alone) |
 | `make test-unit` | `pytest -m unit` |
 | `make test-integration` | `pytest -m integration` (requires `DATABASE_URL` + migrations) |
 | `make test-e2e` | `pytest -m e2e` (Docker compose config + ASGI smoke; compose test needs `docker` on `PATH`) |
@@ -273,8 +273,8 @@ Run `make` or `make help` to print this list from the Makefile.
 | `make lock` | Regenerates `pdm.lock` from `pyproject.toml` |
 | `make sync` / `make install` | Installs exactly what `pdm.lock` specifies |
 | `make test` | `pdm run python -m pytest` (see `make test-unit`, `test-integration`, `test-e2e`) |
-| `make ci-local` | CI-like Postgres + migrations + Ruff + pytest (Docker) |
-| `make ci-local-stop` | Tear down **`ci-local`** Postgres container |
+| `make ci-local` | CI-like Postgres + migrations + Ruff + pytest; auto-removes container on exit |
+| `make ci-local-stop` | Tear down **`ci-local`** Postgres container manually |
 | `make test-unit` | `pdm run python -m pytest -m unit` |
 | `make test-integration` | `pdm run python -m pytest -m integration` |
 | `make test-e2e` | `pdm run python -m pytest -m e2e` |
