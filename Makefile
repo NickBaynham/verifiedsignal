@@ -1,4 +1,4 @@
-.PHONY: help setup lock sync install test test-unit test-integration test-e2e test-api lint format clean config resources docker-build docker-up docker-down docker-test docker-run api-local api-local-prod ci-local ci-local-stop ci-local-postgres ci-local-migrate-sql ci-local-migrate
+.PHONY: help setup lock sync install test test-unit test-integration test-e2e test-api lint format clean config resources docker-build docker-up docker-down docker-test docker-run api-local api-local-prod migrate ci-local ci-local-stop ci-local-postgres ci-local-migrate-sql ci-local-migrate
 
 # Default Python / PDM (override if needed)
 PYTHON ?= python3
@@ -24,6 +24,11 @@ LOCAL_API_OS_PORT ?= 9200
 LOCAL_API_DATABASE_URL ?= postgresql://$(LOCAL_API_DB_USER):$(LOCAL_API_DB_PASSWORD)@127.0.0.1:$(LOCAL_API_PG_PORT)/$(LOCAL_API_DB_NAME)
 # HTTP bind for api-local / api-local-prod (override if 8000 is in use, e.g. another uvicorn).
 LOCAL_API_PORT ?= 8000
+
+# `make migrate` — Docker Compose postgres service (must be running: docker compose up -d postgres).
+COMPOSE_POSTGRES_SERVICE ?= postgres
+COMPOSE_DB_USER ?= verifiedsignal
+COMPOSE_DB_NAME ?= verifiedsignal
 
 # env(1) prefix applied before `pdm run api` for local host development
 API_LOCAL_ENV = env \
@@ -54,6 +59,7 @@ help:
 	@echo "  make docker-down    Stop app stack"
 	@echo "  make docker-test    Run tests in Docker (compose profile: test)"
 	@echo "  make docker-run     One-off app container run"
+	@echo "  make migrate        Apply db/migrations 001+002 via compose postgres (service must be up)"
 	@echo "  make api-local      Run FastAPI on host with 127.0.0.1 URLs (LOCAL_API_PG_PORT, LOCAL_API_PORT=8000)"
 	@echo "  make api-local-prod Same as api-local without --reload"
 	@echo "  make ci-local       Ephemeral Postgres:16 + migrations + Ruff + pytest; removes container after (even on failure)"
@@ -116,6 +122,10 @@ docker-test: config docker-build
 
 docker-run: config docker-build
 	$(DOCKER_COMPOSE) run --rm app
+
+migrate:
+	$(DOCKER_COMPOSE) exec -T $(COMPOSE_POSTGRES_SERVICE) psql -U $(COMPOSE_DB_USER) -d $(COMPOSE_DB_NAME) -v ON_ERROR_STOP=1 < db/migrations/001_initial_schema.up.sql
+	$(DOCKER_COMPOSE) exec -T $(COMPOSE_POSTGRES_SERVICE) psql -U $(COMPOSE_DB_USER) -d $(COMPOSE_DB_NAME) -v ON_ERROR_STOP=1 < db/migrations/002_intake_document_fields.up.sql
 
 api-local:
 	$(API_LOCAL_ENV) $(PDM) run python -m uvicorn app.main:app --host 0.0.0.0 --port $(LOCAL_API_PORT) --reload

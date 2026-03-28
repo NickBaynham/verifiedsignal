@@ -13,11 +13,20 @@ This directory holds **canonical** schema definitions for VerifiedSignal. The ap
 
 ### Applying manually
 
+From the repo root, with **Docker Compose Postgres** already running (`docker compose up -d postgres`):
+
+```bash
+make migrate
+```
+
+That applies **001** then **002** via `docker compose exec` (same as below).
+
 With Docker Compose Postgres (from the repo root):
 
 ```bash
 docker compose up -d postgres
 docker compose exec -T postgres psql -U verifiedsignal -d verifiedsignal -v ON_ERROR_STOP=1 < db/migrations/001_initial_schema.up.sql
+docker compose exec -T postgres psql -U verifiedsignal -d verifiedsignal -v ON_ERROR_STOP=1 < db/migrations/002_intake_document_fields.up.sql
 ```
 
 Or from a host with `psql`:
