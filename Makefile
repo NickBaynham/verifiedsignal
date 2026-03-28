@@ -1,13 +1,14 @@
-.PHONY: help setup lock sync install test test-unit test-integration test-e2e test-api lint format clean config resources docker-build docker-up docker-down docker-test docker-run ci-local ci-local-stop ci-local-postgres ci-local-migrate
+.PHONY: help setup lock sync install test test-unit test-integration test-e2e test-api lint format clean config resources docker-build docker-up docker-down docker-test docker-run ci-local ci-local-stop ci-local-postgres ci-local-migrate-sql ci-local-migrate
 
 # Default Python / PDM (override if needed)
 PYTHON ?= python3
 PDM ?= pdm
 DOCKER_COMPOSE ?= docker compose
 
-# Ephemeral Postgres for `make ci-local` (same image/credentials as GitHub Actions). Override if 5432 is taken.
+# Ephemeral Postgres for `make ci-local` (same image/credentials as GitHub Actions).
+# Default host port 5433 avoids clashing with Compose Postgres on 5432; override with CI_LOCAL_PG_PORT=5432 if free.
 CI_LOCAL_PG_CONTAINER ?= verifiedsignal-ci-postgres
-CI_LOCAL_PG_PORT ?= 5432
+CI_LOCAL_PG_PORT ?= 5433
 CI_LOCAL_PG_URL = postgresql://verifiedsignal:verifiedsignal@127.0.0.1:$(CI_LOCAL_PG_PORT)/verifiedsignal
 
 help:
@@ -104,17 +105,20 @@ ci-local-postgres: ci-local-stop
 		postgres:16-alpine
 	until docker exec $(CI_LOCAL_PG_CONTAINER) pg_isready -U verifiedsignal -d verifiedsignal; do sleep 1; done
 
-ci-local-migrate: ci-local-postgres
+# Apply migrations to an already-running $(CI_LOCAL_PG_CONTAINER) (used by ci-local without restarting Postgres).
+ci-local-migrate-sql:
 	docker exec -i $(CI_LOCAL_PG_CONTAINER) psql -U verifiedsignal -d verifiedsignal -v ON_ERROR_STOP=1 \
 		< db/migrations/001_initial_schema.up.sql
 	docker exec -i $(CI_LOCAL_PG_CONTAINER) psql -U verifiedsignal -d verifiedsignal -v ON_ERROR_STOP=1 \
 		< db/migrations/002_intake_document_fields.up.sql
 
-# One shell so EXIT trap runs after postgres is up: always remove container (success, ruff/pytest failure, or migrate failure).
+ci-local-migrate: ci-local-postgres ci-local-migrate-sql
+
+# One shell: EXIT trap runs for any failure (including docker bind errors) so the named container is not left behind.
 ci-local:
 	set -e; \
-	$(MAKE) ci-local-postgres; \
 	trap 'docker rm -f $(CI_LOCAL_PG_CONTAINER) 2>/dev/null || true' EXIT; \
-	$(MAKE) ci-local-migrate; \
+	$(MAKE) ci-local-postgres; \
+	$(MAKE) ci-local-migrate-sql; \
 	env DATABASE_URL='$(CI_LOCAL_PG_URL)' $(PDM) run python -m ruff check src tests app worker; \
 	env DATABASE_URL='$(CI_LOCAL_PG_URL)' $(PDM) run python -m pytest -v --tb=short

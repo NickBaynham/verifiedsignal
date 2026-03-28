@@ -85,10 +85,10 @@ make ci-local       # ephemeral Postgres + migrations + lint + pytest; **removes
 make ci-local-stop  # optional: remove the container if you started Postgres without a full ci-local run
 ```
 
-- Requires **Docker** on your `PATH` and port **`5432`** free on the host. If something else already uses **5432** (for example Compose Postgres), pick another port:
+- Requires **Docker** on your `PATH`. By default the DB is published on host port **`5433`** so **`make ci-local`** does not fight **Compose Postgres** on **5432**. To use **5432** instead (when it is free):
 
   ```bash
-  make ci-local CI_LOCAL_PG_PORT=5433
+  make ci-local CI_LOCAL_PG_PORT=5432
   ```
 
 - **`make ci-local`** removes any existing container named **`verifiedsignal-ci-postgres`** (see **`CI_LOCAL_PG_CONTAINER`** in the Makefile) before starting, and **removes it again on exit** (success or failure) so the next run is not blocked on the port.
