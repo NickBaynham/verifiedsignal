@@ -1,4 +1,4 @@
-.PHONY: help setup lock sync install test test-unit test-integration test-e2e test-api lint format clean config resources docker-build docker-up docker-down docker-test docker-run ci-local ci-local-stop ci-local-postgres ci-local-migrate-sql ci-local-migrate
+.PHONY: help setup lock sync install test test-unit test-integration test-e2e test-api lint format clean config resources docker-build docker-up docker-down docker-test docker-run api-local api-local-prod ci-local ci-local-stop ci-local-postgres ci-local-migrate-sql ci-local-migrate
 
 # Default Python / PDM (override if needed)
 PYTHON ?= python3
@@ -10,6 +10,25 @@ DOCKER_COMPOSE ?= docker compose
 CI_LOCAL_PG_CONTAINER ?= verifiedsignal-ci-postgres
 CI_LOCAL_PG_PORT ?= 5433
 CI_LOCAL_PG_URL = postgresql://verifiedsignal:verifiedsignal@127.0.0.1:$(CI_LOCAL_PG_PORT)/verifiedsignal
+
+# Host-side service URLs for `make api-local` / `api-local-prod` (pdm run api on your machine while
+# Postgres / Redis / MinIO / OpenSearch run in Docker with default published ports).
+# Override any piece, e.g. `make api-local LOCAL_API_PG_PORT=5433` or set LOCAL_API_DATABASE_URL entirely.
+LOCAL_API_DB_USER ?= verifiedsignal
+LOCAL_API_DB_PASSWORD ?= verifiedsignal
+LOCAL_API_DB_NAME ?= verifiedsignal
+LOCAL_API_PG_PORT ?= 5432
+LOCAL_API_REDIS_PORT ?= 6379
+LOCAL_API_MINIO_PORT ?= 9000
+LOCAL_API_OS_PORT ?= 9200
+LOCAL_API_DATABASE_URL ?= postgresql://$(LOCAL_API_DB_USER):$(LOCAL_API_DB_PASSWORD)@127.0.0.1:$(LOCAL_API_PG_PORT)/$(LOCAL_API_DB_NAME)
+
+# env(1) prefix applied before `pdm run api` for local host development
+API_LOCAL_ENV = env \
+	DATABASE_URL='$(LOCAL_API_DATABASE_URL)' \
+	REDIS_URL='redis://127.0.0.1:$(LOCAL_API_REDIS_PORT)/0' \
+	S3_ENDPOINT_URL='http://127.0.0.1:$(LOCAL_API_MINIO_PORT)' \
+	OPENSEARCH_URL='http://127.0.0.1:$(LOCAL_API_OS_PORT)'
 
 help:
 	@echo "VerifiedSignal — common targets"
@@ -33,6 +52,8 @@ help:
 	@echo "  make docker-down    Stop app stack"
 	@echo "  make docker-test    Run tests in Docker (compose profile: test)"
 	@echo "  make docker-run     One-off app container run"
+	@echo "  make api-local      Run FastAPI on host with 127.0.0.1 URLs (overrides .env Docker hostnames)"
+	@echo "  make api-local-prod Same as api-local without --reload"
 	@echo "  make ci-local       Ephemeral Postgres:16 + migrations + Ruff + pytest; removes container after (even on failure)"
 	@echo "  make ci-local-stop  Remove the ci-local Postgres container (manual cleanup)"
 
@@ -93,6 +114,12 @@ docker-test: config docker-build
 
 docker-run: config docker-build
 	$(DOCKER_COMPOSE) run --rm app
+
+api-local:
+	$(API_LOCAL_ENV) $(PDM) run api
+
+api-local-prod:
+	$(API_LOCAL_ENV) $(PDM) run api-prod
 
 ci-local-stop:
 	docker rm -f $(CI_LOCAL_PG_CONTAINER) 2>/dev/null || true
