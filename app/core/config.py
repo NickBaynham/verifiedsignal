@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+import os
 from functools import lru_cache
 from uuid import UUID
 
-from pydantic import Field
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -24,6 +25,16 @@ class Settings(BaseSettings):
         default="postgresql://verifiedsignal:verifiedsignal@localhost:5432/verifiedsignal",
         validation_alias="DATABASE_URL",
     )
+
+    @field_validator("database_url", mode="before")
+    @classmethod
+    def database_url_from_process_environ(cls, v: object) -> object:
+        """Prefer live os.environ so CI / make ci-local match psycopg (tests use getenv)."""
+        env_url = os.environ.get("DATABASE_URL")
+        if env_url is not None and env_url.strip() != "":
+            return env_url
+        return v
+
     redis_url: str = Field(
         default="redis://localhost:6379/0",
         validation_alias="REDIS_URL",

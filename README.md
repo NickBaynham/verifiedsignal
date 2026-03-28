@@ -10,9 +10,9 @@ This repo is an **early scaffold** with the following in place:
 - **HTTP API** — root package **`app/`**: **FastAPI** (`app/main.py`), **`/api/v1`** routes for health, info, **Phase 1 document intake** (`POST /api/v1/documents` multipart upload → Postgres + MinIO/S3 + ARQ), search stub, and **SSE** (`/api/v1/events/stream`). **SQLAlchemy** session factory for Postgres (`app/db/session.py`); placeholder auth (`app/auth/placeholder.py`).
 - **Worker** — root package **`worker/`**: **[ARQ](https://arq-docs.helpmanual.io/)** worker on Redis (`pdm run worker`), `process_document` task with **simulated pipeline stages** (`worker/pipeline.py`). Intended to evolve into real ingestion, scoring, and OpenSearch indexing (all driven from Postgres truth).
 - **PDM** — `pyproject.toml`, **`pdm.lock`**, scripts: **`pdm run api`** (uvicorn reload), **`pdm run api-prod`**, **`pdm run worker`**, dev group (**pytest**, **ruff**, etc.).
-- **Makefile** — `setup`, `lock` / `sync`, `test` / `test-unit` / `test-integration` / `test-e2e` / **`test-api`**, `lint`, `format`, Docker targets.
+- **Makefile** — `setup`, `lock` / `sync`, `test` / `test-unit` / `test-integration` / `test-e2e` / **`test-api`**, **`ci-local`** / **`ci-local-stop`**, `lint`, `format`, Docker targets.
 - **Tests** — **`pytest`** markers: **`unit`**, **`integration`**, **`e2e`**, **`api`**. See **[`tests/README.md`](tests/README.md)**.
-- **CI** — **[`.github/workflows/ci.yml`](.github/workflows/ci.yml)** — Ruff on `src`, `tests`, `app`, `worker`; Postgres **16** + migrations; **`pdm run pytest`** (full suite).
+- **CI** — **[`.github/workflows/ci.yml`](.github/workflows/ci.yml)** — Ruff on `src`, `tests`, `app`, `worker`; Postgres **16** + migrations; **`pdm run python -m pytest`** (full suite).
 - **Docker** — **`Dockerfile`** copies `app/`, `worker/`, `src/`, `tests/`, `db/`, sets **`PYTHONPATH=/app`**, default CMD **`api-prod`** (uvicorn).
 - **Docker Compose** — infra + runtimes:
   - **PostgreSQL**, **Redis**, **MinIO**, **OpenSearch**, **Dashboards**
@@ -60,7 +60,60 @@ This repo is an **early scaffold** with the following in place:
    make lint
    ```
 
-   Integration tests: **schema** and **intake** tests need **`DATABASE_URL`** and migrations **001 + 002**; lightweight **API route** tests use stubs and always run. See [`tests/README.md`](tests/README.md).
+   For a **full suite on your machine** (including integration tests against real Postgres), see **[Testing locally](#testing-locally)** below.
+
+## Testing locally
+
+### Quick run (no Postgres)
+
+After **`make setup`**:
+
+```bash
+make test    # unit, e2e, api; integration skips if DATABASE_URL is unset
+make lint
+```
+
+Integration tests that need a database are skipped unless **`DATABASE_URL`** is set and migrations **001** and **002** are applied. Markers and behavior are described in **[`tests/README.md`](tests/README.md)**.
+
+### Full suite like CI (ephemeral Postgres in Docker)
+
+**[`Makefile`](Makefile)** includes targets that mirror **GitHub Actions**: **Postgres 16**, same user/password/database as CI, migrations **001** + **002**, then **Ruff** and **pytest** with the correct **`DATABASE_URL`**.
+
+```bash
+make setup          # once: dependencies + .env from example if missing
+make ci-local       # (re)starts a throwaway container, migrates, runs lint + pytest -v --tb=short
+make ci-local-stop  # remove the ci-local container when finished
+```
+
+- Requires **Docker** on your `PATH` and port **`5432`** free on the host. If something else already uses **5432** (for example Compose Postgres), pick another port:
+
+  ```bash
+  make ci-local CI_LOCAL_PG_PORT=5433
+  ```
+
+- **`make ci-local`** removes any existing container named **`verifiedsignal-ci-postgres`** (see **`CI_LOCAL_PG_CONTAINER`** in the Makefile) before starting, so each run gets a clean database.
+
+- **`DATABASE_URL` in the process environment** (as set by **`make ci-local`**) takes precedence over **`.env`** for the running app, so SQLAlchemy and **`psycopg`** in tests use the same DSN. If you previously saw “password authentication failed” only on **`POST /documents`** while other integration tests passed, a mismatched **`.env`** was the usual cause.
+
+### Compose Postgres (reuse your dev database)
+
+If you prefer the project’s **Compose** Postgres:
+
+```bash
+docker compose up -d postgres
+```
+
+Apply **001** then **002** from the repo root (examples in **[`db/README.md`](db/README.md)**), then point **`DATABASE_URL`** at the instance (typically **`postgresql://verifiedsignal:verifiedsignal@localhost:5432/verifiedsignal`** from the host) and run:
+
+```bash
+make test
+# or only integration-marked tests:
+make test-integration
+```
+
+### Tests inside Docker
+
+**`make docker-test`** builds the app image and runs **pytest** in the Compose **`test`** service (see **[Useful commands](#useful-commands)**).
 
 ## HTTP API and worker (local)
 
@@ -152,6 +205,8 @@ curl -N http://127.0.0.1:8000/api/v1/events/stream
 | `make lock` | Refresh `pdm.lock` after dependency changes |
 | `make sync` | Install exactly what `pdm.lock` specifies |
 | `make test` | Pytest (unit + e2e; integration skips if `DATABASE_URL` unset) |
+| `make ci-local` | Ephemeral Postgres **16** + migrations **001**/**002** + Ruff + pytest (like CI); needs Docker |
+| `make ci-local-stop` | Remove the **`ci-local`** Postgres container |
 | `make test-unit` | `pytest -m unit` |
 | `make test-integration` | `pytest -m integration` (requires `DATABASE_URL` + migrations) |
 | `make test-e2e` | `pytest -m e2e` (Docker compose config + ASGI smoke; compose test needs `docker` on `PATH`) |
@@ -163,9 +218,9 @@ curl -N http://127.0.0.1:8000/api/v1/events/stream
 
 | Command | Purpose |
 |--------|---------|
-| `pdm run pytest` | Same as `make test` |
-| `pdm run pytest -m "unit or integration"` | Typical CI subset (with `DATABASE_URL` set) |
-| `pdm run pytest --cov=verifiedsignal` | Tests with coverage (pytest-cov installed) |
+| `pdm run python -m pytest` | Same as `make test` (avoids missing `.venv/bin/pytest` on some setups) |
+| `pdm run python -m pytest -m "unit or integration"` | Typical CI subset (with `DATABASE_URL` set) |
+| `pdm run python -m pytest --cov=verifiedsignal` | Tests with coverage (pytest-cov installed) |
 | `pdm run api` / `pdm run api-prod` | Uvicorn (`app.main:app`) |
 | `pdm run worker` | ARQ worker (`worker.main.WorkerSettings`) |
 | `pdm run ruff check src tests app worker` | Same as `make lint` |
@@ -217,12 +272,14 @@ Run `make` or `make help` to print this list from the Makefile.
 | `make setup` | Runs `make config`, then `pdm install` (requires `pdm` on `PATH`) |
 | `make lock` | Regenerates `pdm.lock` from `pyproject.toml` |
 | `make sync` / `make install` | Installs exactly what `pdm.lock` specifies |
-| `make test` | `pdm run pytest` (see `make test-unit`, `test-integration`, `test-e2e`) |
-| `make test-unit` | `pdm run pytest -m unit` |
-| `make test-integration` | `pdm run pytest -m integration` |
-| `make test-e2e` | `pdm run pytest -m e2e` |
-| `make lint` | `pdm run ruff check src tests` |
-| `make format` | `pdm run ruff format src tests` |
+| `make test` | `pdm run python -m pytest` (see `make test-unit`, `test-integration`, `test-e2e`) |
+| `make ci-local` | CI-like Postgres + migrations + Ruff + pytest (Docker) |
+| `make ci-local-stop` | Tear down **`ci-local`** Postgres container |
+| `make test-unit` | `pdm run python -m pytest -m unit` |
+| `make test-integration` | `pdm run python -m pytest -m integration` |
+| `make test-e2e` | `pdm run python -m pytest -m e2e` |
+| `make lint` | `pdm run python -m ruff check src tests app worker` |
+| `make format` | `pdm run python -m ruff format src tests app worker` |
 | `make clean` | Removes common build and cache directories |
 | `make config` | Copies `.env.example` → `.env` only if `.env` is missing |
 | `make resources` | Placeholder for future asset or download steps |
@@ -243,9 +300,9 @@ pdm install              # install project + dev dependencies from lockfile
 pdm lock                 # update pdm.lock after changing pyproject.toml
 pdm add <package>        # add a runtime dependency
 pdm add -dG dev <pkg>    # add a dev dependency to the `dev` group
-pdm run pytest
-pdm run ruff check src tests app worker
-pdm run ruff format src tests app worker
+pdm run python -m pytest
+pdm run python -m ruff check src tests app worker
+pdm run python -m ruff format src tests app worker
 ```
 
 Runtime dependencies live under `[project]` in `pyproject.toml`. Development tools (pytest, ruff, etc.) live in `[dependency-groups]` under `dev`.
