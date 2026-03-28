@@ -44,10 +44,10 @@ jobs:
       - name: Wait for Postgres and apply migrations
         run: |
           set -euo pipefail
-          PGHOST=127.0.0.1
-          PGPORT=5432
-          PGUSER=verifiedsignal
-          PGDATABASE=verifiedsignal
+          export PGHOST=127.0.0.1
+          export PGPORT=5432
+          export PGUSER=verifiedsignal
+          export PGDATABASE=verifiedsignal
           export PGPASSWORD=verifiedsignal
           sudo apt-get update
           sudo apt-get install -y postgresql-client
