@@ -1,4 +1,4 @@
-.PHONY: help setup lock sync install test test-unit test-integration test-e2e test-api lint format clean config resources docker-build docker-up docker-down docker-test docker-run api-local api-local-prod migrate ci-local ci-local-stop ci-local-postgres ci-local-migrate-sql ci-local-migrate
+.PHONY: help setup lock sync install test test-unit test-integration test-e2e test-api lint format clean config resources docker-build docker-up docker-down docker-test docker-run api-local api-local-prod migrate migrate-002 migrate-reset ci-local ci-local-stop ci-local-postgres ci-local-migrate-sql ci-local-migrate
 
 # Default Python / PDM (override if needed)
 PYTHON ?= python3
@@ -59,7 +59,9 @@ help:
 	@echo "  make docker-down    Stop app stack"
 	@echo "  make docker-test    Run tests in Docker (compose profile: test)"
 	@echo "  make docker-run     One-off app container run"
-	@echo "  make migrate        Apply db/migrations 001+002 via compose postgres (service must be up)"
+	@echo "  make migrate        Apply 001 then 002 (fails if 001 already applied — use migrate-002 or migrate-reset)"
+	@echo "  make migrate-002    Apply only 002 (when 001 is already on the database)"
+	@echo "  make migrate-reset  Drop app schema + re-apply 001+002 (dev only; needs MIGRATE_RESET_OK=1)"
 	@echo "  make api-local      Run FastAPI on host with 127.0.0.1 URLs (LOCAL_API_PG_PORT, LOCAL_API_PORT=8000)"
 	@echo "  make api-local-prod Same as api-local without --reload"
 	@echo "  make ci-local       Ephemeral Postgres:16 + migrations + Ruff + pytest; removes container after (even on failure)"
@@ -126,6 +128,21 @@ docker-run: config docker-build
 migrate:
 	$(DOCKER_COMPOSE) exec -T $(COMPOSE_POSTGRES_SERVICE) psql -U $(COMPOSE_DB_USER) -d $(COMPOSE_DB_NAME) -v ON_ERROR_STOP=1 < db/migrations/001_initial_schema.up.sql
 	$(DOCKER_COMPOSE) exec -T $(COMPOSE_POSTGRES_SERVICE) psql -U $(COMPOSE_DB_USER) -d $(COMPOSE_DB_NAME) -v ON_ERROR_STOP=1 < db/migrations/002_intake_document_fields.up.sql
+
+migrate-002:
+	$(DOCKER_COMPOSE) exec -T $(COMPOSE_POSTGRES_SERVICE) psql -U $(COMPOSE_DB_USER) -d $(COMPOSE_DB_NAME) -v ON_ERROR_STOP=1 < db/migrations/002_intake_document_fields.up.sql
+
+migrate-reset:
+ifeq ($(MIGRATE_RESET_OK),1)
+	$(DOCKER_COMPOSE) exec -T $(COMPOSE_POSTGRES_SERVICE) psql -U $(COMPOSE_DB_USER) -d $(COMPOSE_DB_NAME) -v ON_ERROR_STOP=1 < db/migrations/002_intake_document_fields.down.sql
+	$(DOCKER_COMPOSE) exec -T $(COMPOSE_POSTGRES_SERVICE) psql -U $(COMPOSE_DB_USER) -d $(COMPOSE_DB_NAME) -v ON_ERROR_STOP=1 < db/migrations/001_initial_schema.down.sql
+	$(DOCKER_COMPOSE) exec -T $(COMPOSE_POSTGRES_SERVICE) psql -U $(COMPOSE_DB_USER) -d $(COMPOSE_DB_NAME) -v ON_ERROR_STOP=1 < db/migrations/001_initial_schema.up.sql
+	$(DOCKER_COMPOSE) exec -T $(COMPOSE_POSTGRES_SERVICE) psql -U $(COMPOSE_DB_USER) -d $(COMPOSE_DB_NAME) -v ON_ERROR_STOP=1 < db/migrations/002_intake_document_fields.up.sql
+else
+	@echo >&2 "migrate-reset drops all VerifiedSignal tables and data (002 down, 001 down, then 001+002 up)."
+	@echo >&2 "To confirm: make migrate-reset MIGRATE_RESET_OK=1"
+	@exit 1
+endif
 
 api-local:
 	$(API_LOCAL_ENV) $(PDM) run python -m uvicorn app.main:app --host 0.0.0.0 --port $(LOCAL_API_PORT) --reload

@@ -21,6 +21,18 @@ make migrate
 
 That applies **001** then **002** via `docker compose exec` (same as below).
 
+**`relation "users" already exists`:** **001** is already applied. Either you only need **002**:
+
+```bash
+make migrate-002
+```
+
+or the database is fully migrated already and you can ignore the error. To wipe dev data and re-run both migrations:
+
+```bash
+make migrate-reset MIGRATE_RESET_OK=1
+```
+
 With Docker Compose Postgres (from the repo root):
 
 ```bash
