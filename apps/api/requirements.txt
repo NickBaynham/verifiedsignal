@@ -1,0 +1,3 @@
+# Python dependencies for the FastAPI app are declared in the repository root
+# `pyproject.toml` and installed with PDM (`pdm install`).
+# This file exists for readers of the monorepo-style layout (`apps/api`).

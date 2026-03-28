@@ -34,6 +34,7 @@ def intake_api_client(monkeypatch, database_url: str):
     monkeypatch.setenv("USE_FAKE_QUEUE", "true")
     monkeypatch.setenv("USE_FAKE_STORAGE", "true")
 
+    from app.auth.dependencies import get_current_user
     from app.core.config import reset_settings_cache
     from app.db.session import reset_engine
     from app.main import create_app
@@ -48,9 +49,14 @@ def intake_api_client(monkeypatch, database_url: str):
     reset_event_hub()
     asyncio.run(close_job_queue())
 
+    async def _test_user_id() -> str:
+        return "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+
     application = create_app()
+    application.dependency_overrides[get_current_user] = _test_user_id
     with TestClient(application) as client:
         yield client
+    application.dependency_overrides.pop(get_current_user, None)
 
     asyncio.run(close_job_queue())
     reset_engine()

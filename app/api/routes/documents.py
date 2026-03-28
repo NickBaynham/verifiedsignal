@@ -6,13 +6,19 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_db, get_object_storage_dep
-from app.auth.placeholder import get_optional_user
+from app.auth.dependencies import get_current_user
 from app.schemas.document import IntakeResponse
 from app.services.document_service import run_file_intake
 from app.services.exceptions import IntakeValidationError, StorageUploadError
 from app.services.storage_service import ObjectStorage
 
 router = APIRouter(prefix="/documents", tags=["documents"])
+
+
+@router.get("")
+def list_documents(user_id: str = Depends(get_current_user)) -> dict:
+    """List documents (stub; requires valid access token)."""
+    return {"items": [], "user_id": user_id}
 
 
 @router.post("", response_model=IntakeResponse)
@@ -31,7 +37,7 @@ def upload_document(
     ),
     db: Session = Depends(get_db),
     storage: ObjectStorage = Depends(get_object_storage_dep),
-    _user: dict = Depends(get_optional_user),
+    _user_id: str = Depends(get_current_user),
 ) -> IntakeResponse:
     """
     Phase 1 intake: validate, insert canonical `documents` row (`created`), upload to S3/MinIO,
@@ -39,7 +45,7 @@ def upload_document(
 
     Sync handler so `asyncio.run` inside storage/queue helpers is safe (runs on a worker thread).
     """
-    _ = _user
+    _ = _user_id
     raw = file.file.read()
     try:
         payload = run_file_intake(

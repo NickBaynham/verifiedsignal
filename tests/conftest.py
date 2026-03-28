@@ -39,11 +39,17 @@ def api_client(monkeypatch):
         lambda _settings=None: ("up", None, None),
     )
 
+    from app.auth.dependencies import get_current_user
     from fastapi.testclient import TestClient
 
+    async def _test_user_id() -> str:
+        return "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+
     application = create_app()
+    application.dependency_overrides[get_current_user] = _test_user_id
     with TestClient(application) as client:
         yield client
+    application.dependency_overrides.pop(get_current_user, None)
 
     asyncio.run(close_job_queue())
     reset_engine()

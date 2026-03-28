@@ -76,6 +76,38 @@ class Settings(BaseSettings):
         validation_alias="VERIFIEDSIGNAL_ARQ_QUEUE",
     )
 
+    # --- Supabase Auth (leave empty to disable auth HTTP routes / use test overrides) ---
+    supabase_url: str = Field(default="", validation_alias="SUPABASE_URL")
+    supabase_anon_key: str = Field(default="", validation_alias="SUPABASE_ANON_KEY")
+    supabase_service_role_key: str = Field(
+        default="",
+        validation_alias="SUPABASE_SERVICE_ROLE_KEY",
+    )
+    supabase_jwt_secret: str = Field(default="", validation_alias="SUPABASE_JWT_SECRET")
+    supabase_jwks_url: str = Field(default="", validation_alias="SUPABASE_JWKS_URL")
+    jwt_algorithm: str = Field(default="HS256", validation_alias="JWT_ALGORITHM")
+    jwt_audience: str = Field(default="authenticated", validation_alias="JWT_AUDIENCE")
+
+    # Comma-separated browser origins for credentialed requests (refresh cookie).
+    cors_origins: str = Field(
+        default="http://localhost:5173,http://127.0.0.1:5173,http://localhost:3000,http://127.0.0.1:3000",
+        validation_alias="CORS_ORIGINS",
+    )
+    # Set true behind HTTPS in production so refresh cookies are not sent over plain HTTP.
+    auth_cookie_secure: bool = Field(default=False, validation_alias="AUTH_COOKIE_SECURE")
+
+    @property
+    def cors_origin_list(self) -> list[str]:
+        return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
+
+    @property
+    def supabase_auth_configured(self) -> bool:
+        return bool(
+            self.supabase_url.strip()
+            and self.supabase_service_role_key.strip()
+            and self.supabase_anon_key.strip()
+        )
+
 
 @lru_cache
 def get_settings() -> Settings:
