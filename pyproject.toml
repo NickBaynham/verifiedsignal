@@ -38,9 +38,9 @@ distribution = true
 package-dir = "src"
 
 [tool.pdm.scripts]
-api = "uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
-api-prod = "uvicorn app.main:app --host 0.0.0.0 --port 8000"
-worker = "arq worker.main.WorkerSettings"
+api = "python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
+api-prod = "python -m uvicorn app.main:app --host 0.0.0.0 --port 8000"
+worker = "python -m arq worker.main.WorkerSettings"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
