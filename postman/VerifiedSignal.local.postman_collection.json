@@ -1,0 +1,150 @@
+{
+  "info": {
+    "name": "VerifiedSignal API (local)",
+    "description": "FastAPI surface for local dev (`pdm run api` on port 8000 by default).\n\n**Document intake:** `POST /api/v1/documents` is **multipart/form-data**. After import, open **Upload document**, choose **Body → form-data**, and use **Select Files** on the `file` row (required).\n\n**SSE:** `GET /events/stream` is a long-lived stream; Postman may buffer or time out—use **curl -N** for a reliable SSE test.\n\n**Auth:** Optional `Authorization` header is accepted but not enforced (placeholder).",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://127.0.0.1:8000"
+    }
+  ],
+  "item": [
+    {
+      "name": "Health & info",
+      "item": [
+        {
+          "name": "GET Health",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/v1/health",
+            "description": "Liveness; `database` reflects Postgres connectivity from the API process."
+          },
+          "response": []
+        },
+        {
+          "name": "GET Info",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/v1/info",
+            "description": "Service name, environment, API prefix."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Documents",
+      "item": [
+        {
+          "name": "POST Upload document (multipart)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "description": "Required. Pick any file in Postman (Select Files).",
+                  "type": "file",
+                  "src": []
+                },
+                {
+                  "key": "title",
+                  "description": "Optional display title (defaults to filename).",
+                  "type": "text",
+                  "value": "Postman upload"
+                },
+                {
+                  "key": "collection_id",
+                  "description": "Optional UUID. Default inbox matches migration 002 seed when omitted.",
+                  "type": "text",
+                  "value": "00000000-0000-4000-8000-000000000002",
+                  "disabled": true
+                }
+              ]
+            },
+            "url": "{{baseUrl}}/api/v1/documents",
+            "description": "Phase 1 intake: Postgres row, object storage, ARQ enqueue (if configured)."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Search",
+      "item": [
+        {
+          "name": "GET Search",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/search?q=&limit=10",
+              "query": [
+                {
+                  "key": "q",
+                  "value": "",
+                  "description": "Query string (stub until OpenSearch-backed search exists)."
+                },
+                {
+                  "key": "limit",
+                  "value": "10",
+                  "description": "1–100"
+                }
+              ]
+            },
+            "description": "Search stub; parameters accepted for future OpenSearch wiring."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Events (SSE)",
+      "item": [
+        {
+          "name": "GET Events stream (SSE)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "text/event-stream",
+                "type": "text"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/events/stream",
+            "description": "Server-Sent Events. For CLI testing: `curl -N http://127.0.0.1:8000/api/v1/events/stream`"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Optional auth (placeholder)",
+      "item": [
+        {
+          "name": "GET Health (with Authorization header)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer <token>",
+                "type": "text",
+                "description": "Not validated yet; demonstrates header wiring for future JWT/API keys."
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/health"
+          },
+          "response": []
+        }
+      ]
+    }
+  ]
+}
