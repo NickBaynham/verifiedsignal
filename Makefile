@@ -22,6 +22,8 @@ LOCAL_API_REDIS_PORT ?= 6379
 LOCAL_API_MINIO_PORT ?= 9000
 LOCAL_API_OS_PORT ?= 9200
 LOCAL_API_DATABASE_URL ?= postgresql://$(LOCAL_API_DB_USER):$(LOCAL_API_DB_PASSWORD)@127.0.0.1:$(LOCAL_API_PG_PORT)/$(LOCAL_API_DB_NAME)
+# HTTP bind for api-local / api-local-prod (override if 8000 is in use, e.g. another uvicorn).
+LOCAL_API_PORT ?= 8000
 
 # env(1) prefix applied before `pdm run api` for local host development
 API_LOCAL_ENV = env \
@@ -52,7 +54,7 @@ help:
 	@echo "  make docker-down    Stop app stack"
 	@echo "  make docker-test    Run tests in Docker (compose profile: test)"
 	@echo "  make docker-run     One-off app container run"
-	@echo "  make api-local      Run FastAPI on host with 127.0.0.1 URLs (overrides .env Docker hostnames)"
+	@echo "  make api-local      Run FastAPI on host with 127.0.0.1 URLs (LOCAL_API_PG_PORT, LOCAL_API_PORT=8000)"
 	@echo "  make api-local-prod Same as api-local without --reload"
 	@echo "  make ci-local       Ephemeral Postgres:16 + migrations + Ruff + pytest; removes container after (even on failure)"
 	@echo "  make ci-local-stop  Remove the ci-local Postgres container (manual cleanup)"
@@ -116,10 +118,10 @@ docker-run: config docker-build
 	$(DOCKER_COMPOSE) run --rm app
 
 api-local:
-	$(API_LOCAL_ENV) $(PDM) run api
+	$(API_LOCAL_ENV) $(PDM) run python -m uvicorn app.main:app --host 0.0.0.0 --port $(LOCAL_API_PORT) --reload
 
 api-local-prod:
-	$(API_LOCAL_ENV) $(PDM) run api-prod
+	$(API_LOCAL_ENV) $(PDM) run python -m uvicorn app.main:app --host 0.0.0.0 --port $(LOCAL_API_PORT)
 
 ci-local-stop:
 	docker rm -f $(CI_LOCAL_PG_CONTAINER) 2>/dev/null || true
