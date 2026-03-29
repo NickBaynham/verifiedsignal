@@ -23,7 +23,9 @@ from io import BytesIO
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings, get_settings
+from app.db.models import Document, DocumentSource
 from app.repositories import document_repository as doc_repo
+from app.services.document_access import resolve_accessible_collection_ids
 from app.services.event_service import get_event_hub
 from app.services.exceptions import IntakeValidationError, StorageUploadError
 from app.services.queue_service import enqueue_process_document_sync
@@ -215,3 +217,72 @@ def run_file_intake_from_bytesio(
         storage=storage,
         settings=settings,
     )
+
+
+def list_documents_for_user(
+    session: Session,
+    *,
+    auth_sub: str,
+    settings: Settings | None = None,
+    limit: int = 50,
+    offset: int = 0,
+) -> tuple[list[Document], int]:
+    """Return (document ORM rows, total count) visible to the caller."""
+    settings = settings or get_settings()
+    cids = resolve_accessible_collection_ids(session, auth_sub, settings)
+    total = doc_repo.count_documents_in_collections(session, cids)
+    items = doc_repo.list_documents_in_collections(session, cids, limit=limit, offset=offset)
+    return items, total
+
+
+def get_document_for_user(
+    session: Session,
+    *,
+    document_id: uuid.UUID,
+    auth_sub: str,
+    settings: Settings | None = None,
+) -> tuple[Document, list[DocumentSource]] | None:
+    """Return (Document, sources) if visible; otherwise None."""
+    settings = settings or get_settings()
+    allowed = set(resolve_accessible_collection_ids(session, auth_sub, settings))
+    doc = doc_repo.get_document(session, document_id)
+    if doc is None or doc.collection_id not in allowed:
+        return None
+    sources = doc_repo.list_sources_for_document(session, document_id)
+    return doc, sources
+
+
+def delete_document_for_user(
+    session: Session,
+    *,
+    document_id: uuid.UUID,
+    auth_sub: str,
+    storage: ObjectStorage,
+    settings: Settings | None = None,
+) -> bool:
+    """
+    Remove raw object (best effort) and delete the canonical row.
+    Returns True if a row was removed.
+    """
+    settings = settings or get_settings()
+    allowed = set(resolve_accessible_collection_ids(session, auth_sub, settings))
+    doc = doc_repo.get_document(session, document_id)
+    if doc is None or doc.collection_id not in allowed:
+        return False
+
+    key = doc.storage_key
+    if key:
+        try:
+            storage.delete_object(key)
+        except Exception as e:
+            log.warning(
+                "document_delete_storage_failed document_id=%s key=%s err=%s",
+                document_id,
+                key,
+                e,
+            )
+
+    if not doc_repo.delete_document_row(session, document_id):
+        return False
+    session.commit()
+    return True

@@ -54,6 +54,8 @@ class ObjectStorage(Protocol):
 
     def upload_fileobj(self, key: str, fileobj: IO[bytes], content_type: str | None) -> None: ...
 
+    def delete_object(self, key: str) -> None: ...
+
 
 class InMemoryObjectStorage:
     """Test / local dev without MinIO."""
@@ -75,6 +77,9 @@ class InMemoryObjectStorage:
 
     def upload_fileobj(self, key: str, fileobj: IO[bytes], content_type: str | None) -> None:
         self.upload_bytes(key, fileobj.read(), content_type)
+
+    def delete_object(self, key: str) -> None:
+        self.objects.pop(key, None)
 
 
 class S3ObjectStorage:
@@ -141,6 +146,17 @@ class S3ObjectStorage:
         try:
             self._client.upload_fileobj(fileobj, self._bucket, key, ExtraArgs=extra)
         except (ClientError, BotoCoreError) as e:
+            raise StorageUploadError(str(e)) from e
+
+    def delete_object(self, key: str) -> None:
+        try:
+            self._client.delete_object(Bucket=self._bucket, Key=key)
+        except ClientError as e:
+            code = e.response.get("Error", {}).get("Code", "")
+            if code in ("404", "NoSuchKey", "NotFound"):
+                return
+            raise StorageUploadError(f"delete object failed: {e}") from e
+        except BotoCoreError as e:
             raise StorageUploadError(str(e)) from e
 
 

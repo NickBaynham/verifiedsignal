@@ -33,3 +33,12 @@ def test_in_memory_storage_roundtrip():
     store.upload_bytes("raw/x/y.txt", b"abc", "text/plain")
     assert store.objects["raw/x/y.txt"] == b"abc"
     assert store.bucket == "b1"
+
+
+@pytest.mark.unit
+def test_in_memory_delete_object_idempotent():
+    store = InMemoryObjectStorage(bucket="b1")
+    store.upload_bytes("k", b"x", None)
+    store.delete_object("k")
+    assert "k" not in store.objects
+    store.delete_object("k")

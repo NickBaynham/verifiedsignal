@@ -1,4 +1,4 @@
-.PHONY: help setup lock sync install test test-unit test-integration test-e2e test-api lint format clean config resources docker-build docker-up docker-down docker-test docker-run api-local api-local-prod migrate migrate-002 migrate-reset ci-local ci-local-stop ci-local-postgres ci-local-migrate-sql ci-local-migrate
+.PHONY: help setup lock sync install test test-unit test-integration test-e2e test-api lint format clean config resources docker-build docker-up docker-down docker-test docker-run api-local api-local-prod api-local-restart migrate migrate-002 migrate-reset ci-local ci-local-stop ci-local-postgres ci-local-migrate-sql ci-local-migrate
 
 # Default Python / PDM (override if needed)
 PYTHON ?= python3
@@ -64,6 +64,7 @@ help:
 	@echo "  make migrate-reset  Drop app schema + re-apply 001+002 (dev only; needs MIGRATE_RESET_OK=1)"
 	@echo "  make api-local      Run FastAPI on host with 127.0.0.1 URLs (LOCAL_API_PG_PORT, LOCAL_API_PORT=8000)"
 	@echo "  make api-local-prod Same as api-local without --reload"
+	@echo "  make api-local-restart  Kill process on LOCAL_API_PORT then run api-local (same vars)"
 	@echo "  make ci-local       Ephemeral Postgres:16 + migrations + Ruff + pytest; removes container after (even on failure)"
 	@echo "  make ci-local-stop  Remove the ci-local Postgres container (manual cleanup)"
 
@@ -149,6 +150,18 @@ api-local:
 
 api-local-prod:
 	$(API_LOCAL_ENV) $(PDM) run python -m uvicorn app.main:app --host 0.0.0.0 --port $(LOCAL_API_PORT)
+
+# Free LOCAL_API_PORT (SIGTERM then SIGKILL) so a new uvicorn can bind; then start api-local.
+api-local-restart:
+	@echo "Stopping listeners on TCP port $(LOCAL_API_PORT) (if any)…"
+	@for p in $$(lsof -nP -tiTCP:$(LOCAL_API_PORT) -sTCP:LISTEN 2>/dev/null | sort -u); do \
+		[ -n "$$p" ] && kill "$$p" 2>/dev/null || true; \
+	done; \
+	sleep 1; \
+	for p in $$(lsof -nP -tiTCP:$(LOCAL_API_PORT) -sTCP:LISTEN 2>/dev/null | sort -u); do \
+		[ -n "$$p" ] && kill -9 "$$p" 2>/dev/null || true; \
+	done
+	$(MAKE) api-local
 
 ci-local-stop:
 	docker rm -f $(CI_LOCAL_PG_CONTAINER) 2>/dev/null || true

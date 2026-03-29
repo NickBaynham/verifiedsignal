@@ -151,6 +151,12 @@ def test_documents_with_valid_jwt(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("JWT_ALGORITHM", "HS256")
     monkeypatch.setenv("JWT_AUDIENCE", "authenticated")
     reset_settings_cache()
+
+    def _fake_list(*_a, **_k):
+        return ([], 0)
+
+    monkeypatch.setattr("app.api.routes.documents.list_documents_for_user", _fake_list)
+
     token = jwt.encode(
         {"sub": "user-xyz", "aud": "authenticated"},
         secret,
@@ -162,5 +168,8 @@ def test_documents_with_valid_jwt(monkeypatch: pytest.MonkeyPatch) -> None:
             headers={"Authorization": f"Bearer {token}"},
         )
     assert r.status_code == 200
-    assert r.json()["user_id"] == "user-xyz"
+    body = r.json()
+    assert body["user_id"] == "user-xyz"
+    assert body["items"] == []
+    assert body["total"] == 0
     reset_settings_cache()

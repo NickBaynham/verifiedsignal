@@ -5,7 +5,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from sqlalchemy import BigInteger, DateTime, LargeBinary, String, Text, func
+from sqlalchemy import BigInteger, DateTime, Integer, LargeBinary, String, Text, func
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
@@ -17,9 +17,7 @@ class Base(DeclarativeBase):
 class Document(Base):
     __tablename__ = "documents"
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
-    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     collection_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
     title: Mapped[str | None] = mapped_column(Text, nullable=True)
     external_key: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -45,9 +43,7 @@ class Document(Base):
 class DocumentSource(Base):
     __tablename__ = "document_sources"
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
-    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     document_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
     source_kind: Mapped[str] = mapped_column(String(32), nullable=False)
     locator: Mapped[str] = mapped_column(Text, nullable=False)
@@ -59,5 +55,60 @@ class DocumentSource(Base):
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
     updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class Collection(Base):
+    __tablename__ = "collections"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organization_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    name: Mapped[str] = mapped_column(Text, nullable=False)
+    slug: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class PipelineRun(Base):
+    __tablename__ = "pipeline_runs"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    document_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    pipeline_name: Mapped[str] = mapped_column(Text, nullable=False)
+    pipeline_version: Mapped[str] = mapped_column(Text, nullable=False)
+    definition_schema_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="pending")
+    stage: Mapped[str] = mapped_column(String(32), nullable=False, default="queued")
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    error_code: Mapped[str | None] = mapped_column(Text, nullable=True)
+    error_detail: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    run_metadata: Mapped[dict] = mapped_column(JSONB, nullable=False, server_default="{}")
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class PipelineEvent(Base):
+    __tablename__ = "pipeline_events"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    pipeline_run_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    step_index: Mapped[int] = mapped_column(Integer, nullable=False)
+    event_type: Mapped[str] = mapped_column(Text, nullable=False)
+    stage: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    payload: Mapped[dict] = mapped_column(JSONB, nullable=False, server_default="{}")
+    event_schema_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+
+    created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )

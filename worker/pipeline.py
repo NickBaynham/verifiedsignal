@@ -1,50 +1,49 @@
 """
-Document processing pipeline (scaffold).
+Document processing pipeline: persists `pipeline_runs` / `pipeline_events` in Postgres.
 
-Intended evolution:
-1. Load document + sources from Postgres (system-of-record).
-2. Extract text / features; store artifacts in object storage (MinIO/S3).
-3. Run scoring / LLM steps; persist `document_scores` + `pipeline_events`.
-4. Index derived fields into OpenSearch (rebuildable; replay from Postgres + events).
+Runs blocking DB work in a worker thread so the ARQ async task stays non-blocking.
 """
 
 from __future__ import annotations
 
 import asyncio
+import uuid
 from typing import Any
 
-from worker.events import emit_worker_event
+from app.pipeline.constants import DOCUMENT_SCAFFOLD_STAGES
+
 from worker.logging import get_logger
 
 log = get_logger("verifiedsignal.worker.pipeline")
 
-# Simulated stages — map to `pipeline_runs.stage` values in the real system.
-STAGES = ("ingest", "extract", "enrich", "score", "index", "finalize")
+# Re-export for tests and callers that import STAGES from here.
+STAGES = DOCUMENT_SCAFFOLD_STAGES
+
+
+def run_pipeline_job(document_id: str, job_id: str) -> None:
+    """Open a sync SQLAlchemy session, run scaffold pipeline, commit."""
+    from app.db.session import get_session_factory
+    from app.services.pipeline_run_service import execute_scaffold_pipeline
+
+    SessionLocal = get_session_factory()
+    session = SessionLocal()
+    try:
+        execute_scaffold_pipeline(session, uuid.UUID(document_id), job_id)
+        session.commit()
+    except Exception:
+        session.rollback()
+        raise
+    finally:
+        session.close()
 
 
 async def run_document_pipeline(ctx: dict[str, Any], document_id: str) -> None:
     """
-    Placeholder pipeline: sleeps between stages and emits events.
+    ARQ entry: execute pipeline in a thread pool (sync SQLAlchemy + psycopg).
 
     `ctx` is the ARQ job context (`ctx['job_id']`, redis, etc.).
     """
-    job_id = ctx.get("job_id", "unknown")
-    log.info("pipeline_start document_id=%s job_id=%s", document_id, job_id)
-    emit_worker_event(
-        "pipeline_started",
-        {"document_id": document_id, "job_id": job_id},
-    )
-
-    for stage in STAGES:
-        await asyncio.sleep(0.05)
-        log.info("pipeline_stage document_id=%s stage=%s", document_id, stage)
-        emit_worker_event(
-            "pipeline_stage",
-            {"document_id": document_id, "stage": stage, "job_id": job_id},
-        )
-
-    log.info("pipeline_complete document_id=%s", document_id)
-    emit_worker_event(
-        "pipeline_completed",
-        {"document_id": document_id, "job_id": job_id},
-    )
+    job_id = str(ctx.get("job_id", "unknown"))
+    log.info("pipeline_job_start document_id=%s job_id=%s", document_id, job_id)
+    await asyncio.to_thread(run_pipeline_job, document_id, job_id)
+    log.info("pipeline_job_done document_id=%s job_id=%s", document_id, job_id)

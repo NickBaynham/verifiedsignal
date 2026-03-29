@@ -93,7 +93,39 @@ def test_enqueue_failure_keeps_queued_and_sets_enqueue_error(intake_api_client, 
     assert "simulated" in body["enqueue_error"].lower()
 
 
-@pytest.mark.e2e
+@pytest.mark.integration
+def test_list_get_delete_document(intake_api_client, database_url: str):
+    files = {"file": ("lifecycle.txt", b"one two", "text/plain")}
+    r = intake_api_client.post("/api/v1/documents", files=files)
+    assert r.status_code == 200, r.text
+    did = r.json()["document_id"]
+
+    lst = intake_api_client.get("/api/v1/documents")
+    assert lst.status_code == 200, lst.text
+    body = lst.json()
+    assert body["total"] >= 1
+    assert any(item["id"] == did for item in body["items"])
+
+    one = intake_api_client.get(f"/api/v1/documents/{did}")
+    assert one.status_code == 200, one.text
+    detail = one.json()
+    assert detail["id"] == did
+    assert detail["status"] == "queued"
+    assert detail["sources"]
+    assert detail["sources"][0]["source_kind"] == "upload"
+
+    rm = intake_api_client.delete(f"/api/v1/documents/{did}")
+    assert rm.status_code == 204
+
+    gone = intake_api_client.get(f"/api/v1/documents/{did}")
+    assert gone.status_code == 404
+
+    uuid.UUID(did)
+    with psycopg.connect(database_url) as conn:
+        n = conn.execute("SELECT COUNT(*) FROM documents WHERE id = %s::uuid", (did,)).fetchone()[0]
+    assert n == 0
+
+
 @pytest.mark.integration
 def test_intake_flow_api_db_queue(intake_api_client, database_url: str):
     """Minimal e2e-style intake: HTTP → persisted document → job recorded on fake queue."""

@@ -5,7 +5,7 @@ from __future__ import annotations
 import uuid
 from typing import TYPE_CHECKING
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.db.models import Document, DocumentSource
@@ -92,3 +92,49 @@ def get_document(session: Session, document_id: uuid.UUID) -> Document | None:
 def get_document_by_storage_key(session: Session, storage_key: str) -> Document | None:
     stmt = select(Document).where(Document.storage_key == storage_key).limit(1)
     return session.scalars(stmt).first()
+
+
+def list_documents_in_collections(
+    session: Session,
+    collection_ids: list[uuid.UUID],
+    *,
+    limit: int,
+    offset: int,
+) -> list[Document]:
+    if not collection_ids:
+        return []
+    stmt = (
+        select(Document)
+        .where(Document.collection_id.in_(collection_ids))
+        .order_by(Document.created_at.desc())
+        .limit(limit)
+        .offset(offset)
+    )
+    return list(session.scalars(stmt).all())
+
+
+def count_documents_in_collections(session: Session, collection_ids: list[uuid.UUID]) -> int:
+    if not collection_ids:
+        return 0
+    stmt = (
+        select(func.count()).select_from(Document).where(Document.collection_id.in_(collection_ids))
+    )
+    return int(session.scalar(stmt) or 0)
+
+
+def list_sources_for_document(session: Session, document_id: uuid.UUID) -> list[DocumentSource]:
+    stmt = (
+        select(DocumentSource)
+        .where(DocumentSource.document_id == document_id)
+        .order_by(DocumentSource.created_at)
+    )
+    return list(session.scalars(stmt).all())
+
+
+def delete_document_row(session: Session, document_id: uuid.UUID) -> bool:
+    """Hard delete; `document_sources` rows cascade. Returns False if missing."""
+    doc = session.get(Document, document_id)
+    if doc is None:
+        return False
+    session.delete(doc)
+    return True

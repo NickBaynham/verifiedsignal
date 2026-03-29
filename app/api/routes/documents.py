@@ -2,23 +2,87 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+import uuid
+from typing import Annotated
+
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Response, UploadFile
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_db, get_object_storage_dep
 from app.auth.dependencies import get_current_user
-from app.schemas.document import IntakeResponse
-from app.services.document_service import run_file_intake
+from app.schemas.document import (
+    DocumentDetailOut,
+    DocumentListResponse,
+    DocumentSourceOut,
+    DocumentSummaryOut,
+    IntakeResponse,
+)
+from app.services.document_service import (
+    delete_document_for_user,
+    get_document_for_user,
+    list_documents_for_user,
+    run_file_intake,
+)
 from app.services.exceptions import IntakeValidationError, StorageUploadError
 from app.services.storage_service import ObjectStorage
 
 router = APIRouter(prefix="/documents", tags=["documents"])
 
 
-@router.get("")
-def list_documents(user_id: str = Depends(get_current_user)) -> dict:
-    """List documents (stub; requires valid access token)."""
-    return {"items": [], "user_id": user_id}
+@router.get("", response_model=DocumentListResponse)
+def list_documents(
+    db: Session = Depends(get_db),
+    user_id: str = Depends(get_current_user),
+    limit: Annotated[int, Query(ge=1, le=200)] = 50,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> DocumentListResponse:
+    """
+    List documents in collections the caller can access
+    (org membership or default-collection dev fallback).
+    """
+    items, total = list_documents_for_user(db, auth_sub=user_id, limit=limit, offset=offset)
+    return DocumentListResponse(
+        items=[DocumentSummaryOut.model_validate(d) for d in items],
+        total=total,
+        user_id=user_id,
+    )
+
+
+@router.get("/{document_id}", response_model=DocumentDetailOut)
+def get_document(
+    document_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    user_id: str = Depends(get_current_user),
+) -> DocumentDetailOut:
+    """Single document with intake sources (locators, mime, sizes)."""
+    out = get_document_for_user(db, document_id=document_id, auth_sub=user_id)
+    if out is None:
+        raise HTTPException(status_code=404, detail="Document not found")
+    doc, sources = out
+    base = DocumentSummaryOut.model_validate(doc)
+    return DocumentDetailOut(
+        **base.model_dump(),
+        sources=[DocumentSourceOut.model_validate(s) for s in sources],
+    )
+
+
+@router.delete("/{document_id}", status_code=204)
+def remove_document(
+    document_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    storage: ObjectStorage = Depends(get_object_storage_dep),
+    user_id: str = Depends(get_current_user),
+) -> Response:
+    """Delete canonical row (cascades sources) and remove raw object from storage when possible."""
+    ok = delete_document_for_user(
+        db,
+        document_id=document_id,
+        auth_sub=user_id,
+        storage=storage,
+    )
+    if not ok:
+        raise HTTPException(status_code=404, detail="Document not found")
+    return Response(status_code=204)
 
 
 @router.post("", response_model=IntakeResponse)
@@ -27,8 +91,7 @@ def upload_document(
     collection_id: str | None = Form(
         default=None,
         description=(
-            "Target collection UUID; "
-            "defaults to VERIFIEDSIGNAL_DEFAULT_COLLECTION_ID when omitted"
+            "Target collection UUID; defaults to VERIFIEDSIGNAL_DEFAULT_COLLECTION_ID when omitted"
         ),
     ),
     title: str | None = Form(

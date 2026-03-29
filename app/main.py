@@ -87,6 +87,7 @@ def create_app() -> FastAPI:
     async def redirect_legacy_docs() -> RedirectResponse:
         """Old default path; interactive docs live at `/`."""
         return RedirectResponse(url="/", status_code=307)
+
     application.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origin_list,

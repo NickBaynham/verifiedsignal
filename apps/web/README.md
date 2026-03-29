@@ -1,19 +1,29 @@
 # VerifiedSignal Web (React + Vite)
 
-The SPA should use **Supabase JS** only where the auth spec requires it (e.g. password reset from emailed link); **login, signup, logout, and refresh** should call the FastAPI API (`VITE_API_URL`) so the refresh token stays **httpOnly** on the API origin.
+## UI demo (mock data)
+
+This app ships a **clickable product demo** aligned with the [VerifiedSignal use case spec](https://docs.google.com/document/d/1VpqZqnLtpwi7g64vcXpUSYbyYX8bn84clidrQ-NjtLc/edit) (login, dashboard, upload + pipeline, document reader, collection analytics, search, reports, billing, security). **All domain data is mocked** under `src/demo/` so you can show stakeholders the intended UX before FastAPI endpoints are complete.
+
+- Run locally: `npm install` then `npm run dev` (default [http://127.0.0.1:5173](http://127.0.0.1:5173)).
+- Sign in with **any password ≥ 3 characters** (demo only; no network call).
+- Replace mock modules with `fetch`/`EventSource` calls to `import.meta.env.VITE_API_URL` when wiring the backend.
+
+## Production auth (later)
+
+The SPA should use **Supabase JS** only where the auth spec requires it (e.g. password reset from emailed link); **login, signup, logout, and refresh** should call the FastAPI API (`VITE_API_URL`) so the refresh token stays **httpOnly** on the API origin. See [`docs/auth-supabase.md`](../../docs/auth-supabase.md) at the repo root.
 
 ## Setup
 
 ```bash
-npm create vite@latest . -- --template react-ts
-# If the directory is non-empty, create in a temp folder and merge, or use `npm init vite@latest`.
-npm install @supabase/supabase-js @supabase/auth-ui-react @supabase/auth-ui-shared react-router-dom
+cd apps/web
+npm install
+cp .env.example .env.local   # optional; VITE_* for future API wiring
+npm run dev
 ```
 
-Copy `.env.example` to `.env.local` (gitignored) and set:
+## Build
 
-- `VITE_SUPABASE_URL` — same as `SUPABASE_URL`
-- `VITE_SUPABASE_ANON_KEY` — anon key (reset-password / URL hash flows)
-- `VITE_API_URL` — FastAPI base, e.g. `http://127.0.0.1:8000`
-
-Implement the routes and `AuthContext` described in the product spec (`docs/auth-supabase.md` at repo root).
+```bash
+npm run build
+npm run preview   # serve dist
+```
