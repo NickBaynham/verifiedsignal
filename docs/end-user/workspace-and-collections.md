@@ -41,6 +41,10 @@ Use this if your app wants a dedicated “prepare workspace” step right after 
 
 Use a collection’s **`id`** as **`collection_id`** when uploading files or submitting URLs (see [Documents](documents.md)).
 
+## Collection analytics
+
+**`GET /api/v1/collections/{collection_id}/analytics`** (Bearer required, same access rules as the collection) returns **index facets** (ingest source, status, content type, tags) and **Postgres rollups** over canonical document scores. See [Search and live updates — Collection analytics](search-and-events.md#collection-analytics).
+
 ## Your profile
 
 **`GET /api/v1/users/me`**  

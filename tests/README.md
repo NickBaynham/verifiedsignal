@@ -5,7 +5,7 @@ Pytest is organized by **markers** (see `pyproject.toml`):
 | Marker | Scope | Requirements |
 |--------|--------|----------------|
 | **`unit`** | CLI, package metadata, migrations on disk, worker pipeline sim, event hub, document queue | None |
-| **`integration`** | Postgres schema, **document intake** (`test_document_intake.py`), **search pipeline** (`test_search_pipeline.py`), or FastAPI routes (stubbed DB health + fake queue/storage/OpenSearch via `api_client`) | Intake + schema: **`DATABASE_URL`** + migrations **001–005**. `api_client` tests: none (fixture stubs infra). |
+| **`integration`** | Postgres schema, **document intake** (`test_document_intake.py`), **search pipeline** (`test_search_pipeline.py`), **pipeline + analytics HTTP** (`test_pipeline_and_analytics_api.py`), or FastAPI routes (stubbed DB health + fake queue/storage/OpenSearch via `api_client`) | Intake + schema: **`DATABASE_URL`** + migrations **001–005**. `api_client` tests: none (fixture stubs infra). |
 | **`e2e`** | `docker compose config` + ASGI smoke (`test_api_http`) | **`docker`** on `PATH` for compose test only |
 | **`api`** | ASGI smoke (`TestClient`, multi-route) | None |
 

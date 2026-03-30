@@ -15,7 +15,7 @@ This folder describes what you can do with the product **as it exists today**: H
 | [Signing in and tokens](signing-in.md) | Email signup/login, refresh cookie, access token, logout |
 | [Workspace and collections](workspace-and-collections.md) | Your org, Inbox, profile, choosing a collection |
 | [Documents](documents.md) | Upload files, add by URL, list, open details, delete, statuses |
-| [Search and live updates](search-and-events.md) | Search (preview), real-time event stream |
+| [Search and live updates](search-and-events.md) | Keyword search (filters + facets), SSE, pipeline polling, collection analytics |
 | [Status and troubleshooting](status-and-troubleshooting.md) | Service health, common errors, who to ask |
 
 ## Related documentation

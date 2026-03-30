@@ -7,14 +7,14 @@ VerifiedSignal is a **document intelligence platform** under active development.
 - **Secure sign-in** (optional Supabase-backed email/password through this API).
 - **Storing documents** you upload or point to by URL, in **collections** tied to your workspace.
 - **Background processing** (a worker queue runs a pipeline scaffold on each document).
-- **APIs** to list and inspect documents, check service health, and (later) search an index derived from your data.
+- **APIs** to list and inspect documents, **keyword search** over an OpenSearch-derived index (with optional facets), **live updates** (SSE) and **pipeline polling**, **collection analytics**, and service health checks.
 
 The canonical copy of document metadata lives in **PostgreSQL**; **OpenSearch** holds a **derived keyword index** built by the worker from **extracted plain text** (`documents.body_text`). See [Search and live updates](search-and-events.md).
 
 ## How you interact with the product
 
 1. **HTTP API** — The primary interface. All versioned resources live under a prefix, usually **`/api/v1`**. Session-style auth routes are under **`/auth`** (no `/api/v1` prefix).
-2. **Browser UI demo** — The React app in `apps/web` is a **clickable mock** for demos; it does not yet drive all real APIs. See the [web README](../../apps/web/README.md).
+2. **Browser UI** — The React app in **`apps/web`** runs as a **mock demo** when **`VITE_API_URL`** is unset, or talks to the real API when it is set (dashboard, documents, upload, search, collections, analytics, SSE + pipeline progress). See the [web README](../../apps/web/README.md).
 
 Your organization’s deployment will give you a **base URL** (for example `https://api.example.com`). Every example below uses a placeholder:
 
@@ -38,7 +38,7 @@ Protected routes need an **`Authorization: Bearer <access_token>`** header. Obta
 3. Optionally call **`POST /auth/sync-identity`** or simply call any protected route so your **personal workspace and Inbox** are created (see [Workspace and collections](workspace-and-collections.md)).
 4. **`GET /api/v1/collections`** — pick a **collection id** for uploads.
 5. **`POST /api/v1/documents`** (file) or **`POST /api/v1/documents/from-url`** (JSON) — add a document.
-6. **`GET /api/v1/documents/{id}`** — poll until status shows processing has advanced or failed.
+6. **`GET /api/v1/documents/{id}`** — poll until status shows processing has advanced or failed. For stage-by-stage worker detail, use **`GET /api/v1/documents/{id}/pipeline`** (see [Search and live updates](search-and-events.md#pipeline-polling-worker-progress)).
 
 ## Limits you should know about
 
