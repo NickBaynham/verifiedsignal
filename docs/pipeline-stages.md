@@ -30,3 +30,8 @@ Defined in **`app/pipeline/constants.py`** as **`DOCUMENT_SCAFFOLD_STAGES`**:
 ## Migrations
 
 **`documents.extract_artifact_key`** is added in **`db/migrations/004_document_extract_artifact.up.sql`**. Apply after **001–003** (see **`db/README.md`**).
+
+## Tests
+
+- **Unit:** `tests/unit/test_document_content_extract.py` (routing + extract), `tests/unit/test_intake_storage.py` (artifact key / `object_exists`), `tests/unit/test_queue_score_enqueue.py`.
+- **Integration:** `tests/integration/test_collections_and_pipeline.py` — plain text, **PDF** and **DOCX** intake → **`execute_scaffold_pipeline`** → **`body_text`**, **`extract_artifact_key`**, and in-memory storage artifact bytes; optional score enqueue and stub **`document_scores`** row.
