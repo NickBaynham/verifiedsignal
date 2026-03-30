@@ -45,6 +45,46 @@ def create_intake_row_created(
     return doc
 
 
+def create_url_intake_row(
+    session: Session,
+    *,
+    document_id: uuid.UUID,
+    collection_id: uuid.UUID,
+    original_filename: str,
+    title: str | None,
+    canonical_url: str,
+) -> Document:
+    """
+    Insert `documents` (`created`, no storage yet) plus a `document_sources` row (`url`).
+
+    The worker uploads bytes; `finalize_intake_after_upload` adds the `upload` source.
+    """
+    doc = Document(
+        id=document_id,
+        collection_id=collection_id,
+        title=title or original_filename,
+        status="created",
+        original_filename=original_filename,
+        content_type=None,
+        file_size=None,
+        row_schema_version=2,
+    )
+    session.add(doc)
+    session.flush()
+    session.add(
+        DocumentSource(
+            document_id=document_id,
+            source_kind="url",
+            locator=canonical_url,
+            mime_type=None,
+            byte_length=None,
+            raw_metadata={"phase": "intake_url_submitted"},
+        ),
+    )
+    session.flush()
+    return doc
+
+
 def mark_intake_failed(session: Session, document_id: uuid.UUID, message: str) -> None:
     doc = session.get(Document, document_id)
     if doc is None:

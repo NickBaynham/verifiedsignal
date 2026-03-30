@@ -28,7 +28,7 @@ from app.repositories import document_repository as doc_repo
 from app.services.document_access import resolve_accessible_collection_ids
 from app.services.event_service import get_event_hub
 from app.services.exceptions import IntakeValidationError, StorageUploadError
-from app.services.queue_service import enqueue_process_document_sync
+from app.services.queue_service import enqueue_fetch_url_ingest_sync, enqueue_process_document_sync
 from app.services.storage_service import ObjectStorage, build_raw_object_key, get_object_storage
 
 log = logging.getLogger("verifiedsignal.intake")
@@ -217,6 +217,66 @@ def run_file_intake_from_bytesio(
         storage=storage,
         settings=settings,
     )
+
+
+def run_url_intake_submit(
+    session: Session,
+    *,
+    raw_url: str,
+    collection_id_param: str | None,
+    title: str | None,
+    settings: Settings | None = None,
+) -> dict:
+    """
+    Validate URL (SSRF), insert `created` row + `url` source, enqueue `fetch_url_and_ingest`.
+
+    Returns a dict for `UrlIntakeResponse`.
+    """
+    from urllib.parse import unquote, urlparse
+
+    from app.services.url_ingest_ssrf import validate_url_for_ingest
+
+    settings = settings or get_settings()
+    if not settings.url_ingest_enabled:
+        raise IntakeValidationError("URL ingestion is disabled (URL_INGEST_ENABLED=false)")
+
+    canonical = validate_url_for_ingest(raw_url, settings)
+    collection_id = resolve_collection_id(collection_id_param, settings)
+
+    path = urlparse(canonical).path.rstrip("/")
+    segment = path.rsplit("/", 1)[-1] if path else ""
+    segment = unquote(segment) if segment else ""
+    safe_name = segment.strip() if segment.strip() else "fetched"
+    if len(safe_name) > 240:
+        safe_name = safe_name[:240]
+
+    document_id = uuid.uuid4()
+    doc_repo.create_url_intake_row(
+        session,
+        document_id=document_id,
+        collection_id=collection_id,
+        original_filename=safe_name,
+        title=title,
+        canonical_url=canonical,
+    )
+    session.commit()
+
+    job_id: str | None = None
+    enqueue_error: str | None = None
+    try:
+        job_id = enqueue_fetch_url_ingest_sync(str(document_id))
+    except Exception as e:
+        enqueue_error = str(e)[:8192]
+        doc_repo.mark_enqueue_failed(session, document_id, enqueue_error)
+        session.commit()
+
+    return {
+        "document_id": str(document_id),
+        "status": "created",
+        "source_url": canonical,
+        "job_id": job_id,
+        "enqueue_error": enqueue_error,
+    }
 
 
 def list_documents_for_user(

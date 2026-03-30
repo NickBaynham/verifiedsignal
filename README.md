@@ -122,7 +122,9 @@ make test-integration
 
 **Phase 1 intake (implemented):** `POST /api/v1/documents` accepts **multipart/form-data** with a file. The API validates input, inserts a canonical **`documents`** row in **`created`**, uploads bytes to **S3-compatible storage** (MinIO locally) under `raw/{document_id}/{safe_filename}`, updates the row to **`queued`**, inserts **`document_sources`** with an `s3://{bucket}/{key}` locator, then enqueues **`process_document`** on ARQ. If enqueue fails, the row stays **`queued`** with **`enqueue_error`** set; the object and Postgres metadata are kept.
 
-**Still stubbed / later stages:** extraction, LLM scoring, OpenSearch indexing, full **`pipeline_runs`** wiring, and durable cross-instance SSE (today’s **`EventHub`** is in-process).
+**URL intake (implemented):** `POST /api/v1/documents/from-url` (JSON) validates the URL (SSRF mitigations), inserts a **`created`** row plus a **`document_sources`** row with **`source_kind: url`**, and enqueues **`fetch_url_and_ingest`**. The worker streams the response into storage, then matches the multipart path (`queued` + **`process_document`**). Details, env vars, and security notes: **[`docs/url-ingest.md`](docs/url-ingest.md)**.
+
+**Still stubbed / later stages:** extraction, LLM scoring, OpenSearch indexing, and durable cross-instance SSE (today’s **`EventHub`** is in-process). **`pipeline_runs`** persistence is implemented for the scaffold worker pipeline.
 
 ### Run the API (uvicorn)
 

@@ -2,12 +2,22 @@
 
 from __future__ import annotations
 
+import asyncio
 from typing import Any
+
+from app.services.url_ingest_worker import run_fetch_url_and_ingest_sync
 
 from worker.logging import get_logger
 from worker.pipeline import run_document_pipeline
 
 log = get_logger("verifiedsignal.worker.tasks")
+
+
+async def fetch_url_and_ingest(ctx: dict[str, Any], document_id: str) -> str:
+    """Fetch remote URL for a `created` document, upload raw bytes, enqueue `process_document`."""
+    log.info("task_fetch_url_and_ingest document_id=%s", document_id)
+    await asyncio.to_thread(run_fetch_url_and_ingest_sync, document_id)
+    return document_id
 
 
 async def process_document(ctx: dict[str, Any], document_id: str) -> str:

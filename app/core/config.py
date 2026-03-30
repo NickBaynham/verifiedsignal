@@ -55,6 +55,30 @@ class Settings(BaseSettings):
 
     max_upload_bytes: int = Field(default=52_428_800, validation_alias="MAX_UPLOAD_BYTES")  # 50 MiB
 
+    # URL-based document intake (worker fetches remote bytes → same S3 + pipeline as multipart).
+    url_ingest_enabled: bool = Field(default=True, validation_alias="URL_INGEST_ENABLED")
+    url_fetch_max_bytes: int = Field(
+        default=52_428_800,
+        validation_alias="URL_FETCH_MAX_BYTES",
+        description="Max response body size when fetching a URL (defaults to MAX_UPLOAD_BYTES).",
+    )
+    url_fetch_timeout_s: float = Field(default=60.0, validation_alias="URL_FETCH_TIMEOUT_S")
+    url_fetch_max_redirects: int = Field(default=5, validation_alias="URL_FETCH_MAX_REDIRECTS")
+    url_fetch_follow_redirects: bool = Field(
+        default=True,
+        validation_alias="URL_FETCH_FOLLOW_REDIRECTS",
+    )
+    allow_http_url_ingest: bool = Field(
+        default=False,
+        validation_alias="ALLOW_HTTP_URL_INGEST",
+        description="Allow http:// URLs (dev only; use https in production).",
+    )
+    url_fetch_block_private_networks: bool = Field(
+        default=True,
+        validation_alias="URL_FETCH_BLOCK_PRIVATE_NETWORKS",
+        description="Reject URLs whose hostnames resolve to private/link-local/loopback IPs.",
+    )
+
     s3_endpoint_url: str | None = Field(default=None, validation_alias="S3_ENDPOINT_URL")
     s3_access_key_id: str = Field(default="minioadmin", validation_alias="AWS_ACCESS_KEY_ID")
     s3_secret_access_key: str = Field(

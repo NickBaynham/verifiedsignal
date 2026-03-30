@@ -15,18 +15,27 @@ from app.core.config import get_settings
 class JobQueue(Protocol):
     async def enqueue_process_document(self, document_id: str) -> str: ...
 
+    async def enqueue_fetch_url_ingest(self, document_id: str) -> str: ...
+
 
 class InMemoryJobQueue:
     """Test-safe queue: records jobs; worker is not consuming these."""
 
     def __init__(self) -> None:
-        self.jobs: list[tuple[str, str]] = []
+        # (job_id, function_name, document_id)
+        self.jobs: list[tuple[str, str, str]] = []
         self._lock = asyncio.Lock()
 
     async def enqueue_process_document(self, document_id: str) -> str:
         job_id = str(uuid.uuid4())
         async with self._lock:
-            self.jobs.append((job_id, document_id))
+            self.jobs.append((job_id, "process_document", document_id))
+        return job_id
+
+    async def enqueue_fetch_url_ingest(self, document_id: str) -> str:
+        job_id = str(uuid.uuid4())
+        async with self._lock:
+            self.jobs.append((job_id, "fetch_url_and_ingest", document_id))
         return job_id
 
 
@@ -40,6 +49,12 @@ class ArqJobQueue:
         job = await self._pool.enqueue_job("process_document", document_id)
         if job is None:
             raise RuntimeError("failed to enqueue process_document (duplicate job id?)")
+        return job.job_id
+
+    async def enqueue_fetch_url_ingest(self, document_id: str) -> str:
+        job = await self._pool.enqueue_job("fetch_url_and_ingest", document_id)
+        if job is None:
+            raise RuntimeError("failed to enqueue fetch_url_and_ingest (duplicate job id?)")
         return job.job_id
 
 

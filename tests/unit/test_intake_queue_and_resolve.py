@@ -11,7 +11,7 @@ from app.core.config import Settings, reset_settings_cache
 from app.services.document_service import resolve_collection_id
 from app.services.exceptions import IntakeValidationError
 from app.services.queue_backend import close_job_queue, get_memory_queue
-from app.services.queue_service import enqueue_process_document
+from app.services.queue_service import enqueue_fetch_url_ingest, enqueue_process_document
 
 
 @pytest.mark.unit
@@ -64,7 +64,26 @@ def test_enqueue_process_document_records_on_fake_queue():
         jid = await enqueue_process_document(did)
         assert jid
         q = get_memory_queue()
-        assert q.jobs == [(jid, did)]
+        assert q.jobs == [(jid, "process_document", did)]
+        await close_job_queue()
+
+    asyncio.run(_run())
+    reset_settings_cache()
+    os.environ.pop("USE_FAKE_QUEUE", None)
+
+
+@pytest.mark.unit
+def test_enqueue_fetch_url_ingest_records_on_fake_queue():
+    os.environ["USE_FAKE_QUEUE"] = "true"
+    reset_settings_cache()
+
+    async def _run():
+        await close_job_queue()
+        did = str(uuid.uuid4())
+        jid = await enqueue_fetch_url_ingest(did)
+        assert jid
+        q = get_memory_queue()
+        assert q.jobs == [(jid, "fetch_url_and_ingest", did)]
         await close_job_queue()
 
     asyncio.run(_run())

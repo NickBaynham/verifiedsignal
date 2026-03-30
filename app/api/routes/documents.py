@@ -16,12 +16,15 @@ from app.schemas.document import (
     DocumentSourceOut,
     DocumentSummaryOut,
     IntakeResponse,
+    UrlIntakeRequest,
+    UrlIntakeResponse,
 )
 from app.services.document_service import (
     delete_document_for_user,
     get_document_for_user,
     list_documents_for_user,
     run_file_intake,
+    run_url_intake_submit,
 )
 from app.services.exceptions import IntakeValidationError, StorageUploadError
 from app.services.storage_service import ObjectStorage
@@ -46,6 +49,31 @@ def list_documents(
         total=total,
         user_id=user_id,
     )
+
+
+@router.post("/from-url", response_model=UrlIntakeResponse, status_code=202)
+def ingest_document_from_url(
+    body: UrlIntakeRequest,
+    db: Session = Depends(get_db),
+    _user_id: str = Depends(get_current_user),
+) -> UrlIntakeResponse:
+    """
+    Accept a remote URL: `created` row + `url` source, then worker fetch → S3 → pipeline.
+
+    Poll `GET /documents/{id}` for `queued` / `failed` after the fetch job completes.
+    """
+    _ = _user_id
+    try:
+        payload = run_url_intake_submit(
+            db,
+            raw_url=body.url,
+            collection_id_param=body.collection_id,
+            title=body.title,
+        )
+    except IntakeValidationError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+    return UrlIntakeResponse(**payload)
 
 
 @router.get("/{document_id}", response_model=DocumentDetailOut)

@@ -25,3 +25,19 @@ async def enqueue_process_document(document_id: str) -> str:
 def enqueue_process_document_sync(document_id: str) -> str:
     """Use from synchronous FastAPI routes (sync def) without a running event loop."""
     return asyncio.run(enqueue_process_document(document_id))
+
+
+async def enqueue_fetch_url_ingest(document_id: str) -> str:
+    log.info("enqueue_fetch_url_attempt document_id=%s", document_id)
+    try:
+        queue = await get_job_queue()
+        job_id = await queue.enqueue_fetch_url_ingest(document_id)
+        log.info("enqueue_fetch_url_success document_id=%s job_id=%s", document_id, job_id)
+        return job_id
+    except Exception:
+        log.exception("enqueue_fetch_url_failure document_id=%s", document_id)
+        raise
+
+
+def enqueue_fetch_url_ingest_sync(document_id: str) -> str:
+    return asyncio.run(enqueue_fetch_url_ingest(document_id))

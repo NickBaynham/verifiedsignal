@@ -29,7 +29,8 @@ def test_post_documents_multipart_happy_path(intake_api_client, database_url: st
 
     q = get_memory_queue()
     assert len(q.jobs) == 1
-    assert q.jobs[0][1] == body["document_id"]
+    assert q.jobs[0][1] == "process_document"
+    assert q.jobs[0][2] == body["document_id"]
 
     did = uuid.UUID(body["document_id"])
     with psycopg.connect(database_url) as conn:
@@ -140,4 +141,4 @@ def test_intake_flow_api_db_queue(intake_api_client, database_url: str):
             (did,),
         ).fetchone()[0]
     assert n == 1
-    assert any(j[1] == did for j in get_memory_queue().jobs)
+    assert any(j[2] == did and j[1] == "process_document" for j in get_memory_queue().jobs)

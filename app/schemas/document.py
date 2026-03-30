@@ -8,6 +8,27 @@ from datetime import datetime
 from pydantic import BaseModel, ConfigDict, Field
 
 
+class UrlIntakeRequest(BaseModel):
+    """Remote URL; worker fetches bytes then matches multipart intake (storage + pipeline)."""
+
+    url: str = Field(..., min_length=1, max_length=8192)
+    collection_id: str | None = Field(
+        default=None,
+        description="Target collection UUID; defaults to VERIFIEDSIGNAL_DEFAULT_COLLECTION_ID",
+    )
+    title: str | None = Field(default=None, max_length=2048)
+
+
+class UrlIntakeResponse(BaseModel):
+    """Accepted: `created` until bytes land; then `queued` and `process_document`."""
+
+    document_id: str
+    status: str
+    source_url: str
+    job_id: str | None = None
+    enqueue_error: str | None = None
+
+
 class DocumentCreate(BaseModel):
     title: str | None = Field(default=None, max_length=2048)
     source_uri: str | None = Field(default=None, max_length=8192)
