@@ -34,9 +34,9 @@ def test_info(api_client):
 
 
 @pytest.mark.integration
-def test_search_stub(api_client):
+def test_search_fake_index_empty_without_pipeline(api_client):
     r = api_client.get("/api/v1/search", params={"q": "truth", "limit": 5})
     assert r.status_code == 200
     data = r.json()
     assert data["hits"] == []
-    assert data["index_status"] == "stub"
+    assert data["index_status"] == "fake"

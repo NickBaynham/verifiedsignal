@@ -12,5 +12,5 @@ def test_api_smoke_multi_route(api_client):
     assert api_client.get("/api/v1/health").json()["status"] == "ok"
     r = api_client.get("/api/v1/search", params={"q": "audit"})
     assert r.status_code == 200
-    assert r.json()["index_status"] == "stub"
+    assert r.json()["index_status"] == "fake"
     # Full intake (multipart + Postgres) lives in tests/integration/test_document_intake.py

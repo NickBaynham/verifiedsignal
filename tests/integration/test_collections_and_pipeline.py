@@ -50,8 +50,10 @@ def test_scaffold_pipeline_persists_run_events_and_completes_document(
     monkeypatch.setenv("DATABASE_URL", database_url)
     from app.core.config import reset_settings_cache
     from app.db.session import get_session_factory, reset_engine
+    from app.services.opensearch_document_index import reset_fake_opensearch_index
     from app.services.pipeline_run_service import execute_scaffold_pipeline
 
+    reset_fake_opensearch_index()
     reset_settings_cache()
     reset_engine()
 
@@ -91,4 +93,11 @@ def test_scaffold_pipeline_persists_run_events_and_completes_document(
             """,
             (did,),
         ).fetchone()[0]
-        assert ev_count == 7
+        # pipeline_started + 6×pipeline_stage + extract_complete + index_complete
+        assert ev_count == 9
+
+        body = conn.execute(
+            "SELECT body_text FROM documents WHERE id = %s::uuid",
+            (did,),
+        ).fetchone()[0]
+        assert body == "data"

@@ -8,8 +8,8 @@ This repo is an **early scaffold** with the following in place:
 
 - **CLI package** — Python **3.11+**, `src/verifiedsignal/`, small CLI (`pdm run python -m verifiedsignal`, `pdm run verifiedsignal`).
 - **Supabase session auth (optional)** — FastAPI routes under **`/auth`** (signup, login with **httpOnly** refresh cookie on path `/auth`, refresh, logout, reset email, **`POST /auth/sync-identity`**); JWT validation via **JWKS** or **HS256** (`app/auth/`). Bearer requests can **auto-provision** Postgres **`users`** + personal **org** + **Inbox** collection from the JWT `sub`. Protected examples: **`/api/v1/documents`**, **`/api/v1/collections`**, **`/api/v1/users/me`**. See **[`docs/end-user/README.md`](docs/end-user/README.md)** (end-user guide), **[`docs/auth-supabase.md`](docs/auth-supabase.md)**, **[`docs/tenancy-postgres.md`](docs/tenancy-postgres.md)**, **[`docs/accounts-and-collections.md`](docs/accounts-and-collections.md)** (short pointer), **[`supabase/README.md`](supabase/README.md)**, and **`apps/web/README.md`** for the React/Vite side.
-- **HTTP API** — root package **`app/`**: **FastAPI** (`app/main.py`), **`/api/v1`** routes for **health** (Postgres, Redis, object storage, OpenSearch reachability), info, **Phase 1 document intake** (`POST /api/v1/documents` multipart upload → Postgres + MinIO/S3 + ARQ), search stub, and **SSE** (`/api/v1/events/stream`). **SQLAlchemy** session factory for Postgres (`app/db/session.py`); placeholder auth (`app/auth/placeholder.py`).
-- **Worker** — root package **`worker/`**: **[ARQ](https://arq-docs.helpmanual.io/)** worker on Redis (`pdm run worker`), `process_document` task with **simulated pipeline stages** (`worker/pipeline.py`). Intended to evolve into real ingestion, scoring, and OpenSearch indexing (all driven from Postgres truth).
+- **HTTP API** — root package **`app/`**: **FastAPI** (`app/main.py`), **`/api/v1`** routes for **health** (Postgres, Redis, object storage, OpenSearch reachability), info, **Phase 1 document intake** (`POST /api/v1/documents` multipart upload → Postgres + MinIO/S3 + ARQ), **keyword search** (`GET /api/v1/search` over OpenSearch or **`USE_FAKE_OPENSEARCH`** in tests), and **SSE** (`/api/v1/events/stream`). **SQLAlchemy** session factory for Postgres (`app/db/session.py`); placeholder auth (`app/auth/placeholder.py`).
+- **Worker** — root package **`worker/`**: **[ARQ](https://arq-docs.helpmanual.io/)** worker on Redis (`pdm run worker`), `process_document` task runs pipeline stages including **plain-text extract** (into **`documents.body_text`**) and **OpenSearch indexing** (`worker/pipeline.py`). Scoring and vectors are still future work.
 - **PDM** — `pyproject.toml`, **`pdm.lock`**, scripts: **`pdm run api`** (uvicorn reload), **`pdm run api-prod`**, **`pdm run worker`**, dev group (**pytest**, **ruff**, etc.).
 - **Makefile** — `setup`, `lock` / `sync`, `test` / `test-unit` / `test-integration` / `test-e2e` / **`test-api`**, **`ci-local`** / **`ci-local-stop`**, `lint`, `format`, Docker targets.
 - **Tests** — **`pytest`** markers: **`unit`**, **`integration`**, **`e2e`**, **`api`**. See **[`tests/README.md`](tests/README.md)**.
@@ -75,11 +75,11 @@ make test    # unit, e2e, api; integration skips if DATABASE_URL is unset
 make lint
 ```
 
-Integration tests that need a database are skipped unless **`DATABASE_URL`** is set and migrations **001** and **002** are applied. Markers and behavior are described in **[`tests/README.md`](tests/README.md)**.
+Integration tests that need a database are skipped unless **`DATABASE_URL`** is set and migrations **001**, **002**, and **003** are applied. Markers and behavior are described in **[`tests/README.md`](tests/README.md)**.
 
 ### Full suite like CI (ephemeral Postgres in Docker)
 
-**[`Makefile`](Makefile)** includes targets that mirror **GitHub Actions**: **Postgres 16**, same user/password/database as CI, migrations **001** + **002**, then **Ruff** and **pytest** with the correct **`DATABASE_URL`**.
+**[`Makefile`](Makefile)** includes targets that mirror **GitHub Actions**: **Postgres 16**, same user/password/database as CI, migrations **001**–**003**, then **Ruff** and **pytest** with the correct **`DATABASE_URL`**.
 
 ```bash
 make setup          # once: dependencies + .env from example if missing
@@ -105,7 +105,7 @@ If you prefer the project’s **Compose** Postgres:
 docker compose up -d postgres
 ```
 
-Apply **001** then **002** from the repo root (examples in **[`db/README.md`](db/README.md)**), then point **`DATABASE_URL`** at the instance (typically **`postgresql://verifiedsignal:verifiedsignal@localhost:5432/verifiedsignal`** from the host) and run:
+Apply **001**, **002**, and **003** from the repo root (examples in **[`db/README.md`](db/README.md)**), then point **`DATABASE_URL`** at the instance (typically **`postgresql://verifiedsignal:verifiedsignal@localhost:5432/verifiedsignal`** from the host) and run:
 
 ```bash
 make test
@@ -125,7 +125,7 @@ make test-integration
 
 **URL intake (implemented):** `POST /api/v1/documents/from-url` (JSON) validates the URL (SSRF mitigations), inserts a **`created`** row plus a **`document_sources`** row with **`source_kind: url`**, and enqueues **`fetch_url_and_ingest`**. The worker streams the response into storage, then matches the multipart path (`queued` + **`process_document`**). Details, env vars, and security notes: **[`docs/url-ingest.md`](docs/url-ingest.md)**.
 
-**Still stubbed / later stages:** extraction, LLM scoring, OpenSearch indexing, and durable cross-instance SSE (today’s **`EventHub`** is in-process). **`pipeline_runs`** persistence is implemented for the scaffold worker pipeline.
+**Still stubbed / later stages:** rich binary extract (PDF, Office), LLM scoring, **vector** search, and durable cross-instance SSE (today’s **`EventHub`** is in-process). **Keyword search** uses **plain-text extract** + **OpenSearch** (or **`USE_FAKE_OPENSEARCH`**). **`pipeline_runs`** persistence is implemented for the worker pipeline.
 
 ### Run the API (uvicorn)
 
@@ -134,8 +134,9 @@ From the repo root (PDM puts the project on `PYTHONPATH`):
 ```bash
 make setup
 export DATABASE_URL=postgresql://verifiedsignal:verifiedsignal@localhost:5432/verifiedsignal
-# Apply migrations 001 + 002 (intake columns + default collection seed) — see db/README.md
+# Apply migrations 001–003 — see db/README.md
 export REDIS_URL=redis://localhost:6379/0
+export OPENSEARCH_URL=http://127.0.0.1:9200
 # MinIO / S3 (omit and set USE_FAKE_STORAGE=true to store bytes in-memory only)
 export S3_ENDPOINT_URL=http://127.0.0.1:9000
 export AWS_ACCESS_KEY_ID=minioadmin
@@ -211,7 +212,7 @@ curl -N http://127.0.0.1:8000/api/v1/events/stream
 | `make lock` | Refresh `pdm.lock` after dependency changes |
 | `make sync` | Install exactly what `pdm.lock` specifies |
 | `make test` | Pytest (unit + e2e; integration skips if `DATABASE_URL` unset) |
-| `make ci-local` | Ephemeral Postgres **16** + migrations **001**/**002** + Ruff + pytest; tears down container when finished (even on failure) |
+| `make ci-local` | Ephemeral Postgres **16** + migrations **001**–**003** + Ruff + pytest; tears down container when finished (even on failure) |
 | `make ci-local-stop` | Remove the **`ci-local`** Postgres container (e.g. after **`ci-local-postgres`** alone) |
 | `make test-unit` | `pytest -m unit` |
 | `make test-integration` | `pytest -m integration` (requires `DATABASE_URL` + migrations) |

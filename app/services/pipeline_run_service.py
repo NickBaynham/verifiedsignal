@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 from app.db.models import Document
 from app.pipeline.constants import DOCUMENT_SCAFFOLD_STAGES
 from app.repositories import pipeline_repository as pipe_repo
+from app.services.pipeline_extract_index import extract_body_text_stage, index_opensearch_stage
 
 log = logging.getLogger("verifiedsignal.pipeline.run")
 
@@ -39,17 +40,38 @@ def execute_scaffold_pipeline(session: Session, document_id: uuid.UUID, job_id: 
     log.info("pipeline_started document_id=%s job_id=%s", document_id, job_id)
 
     try:
-        for step_idx, stage in enumerate(DOCUMENT_SCAFFOLD_STAGES, start=1):
+        step_seq = 1
+        for stage in DOCUMENT_SCAFFOLD_STAGES:
             run.stage = stage
             pipe_repo.append_event(
                 session,
                 run.id,
-                step_idx,
+                step_seq,
                 "pipeline_stage",
                 stage,
                 {"job_id": job_id, "stage": stage, "document_id": str(document_id)},
             )
             log.info("pipeline_stage document_id=%s stage=%s job_id=%s", document_id, stage, job_id)
+            step_seq += 1
+
+            if stage == "extract":
+                extract_body_text_stage(
+                    session,
+                    document_id=document_id,
+                    run_id=run.id,
+                    step_index=step_seq,
+                    job_id=job_id,
+                )
+                step_seq += 1
+            elif stage == "index":
+                index_opensearch_stage(
+                    session,
+                    document_id=document_id,
+                    run_id=run.id,
+                    step_index=step_seq,
+                    job_id=job_id,
+                )
+                step_seq += 1
 
         pipe_repo.complete_run(session, run)
         pipe_repo.set_document_status(session, document_id, "completed")

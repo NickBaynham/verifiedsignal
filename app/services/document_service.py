@@ -28,6 +28,7 @@ from app.repositories import document_repository as doc_repo
 from app.services.document_access import resolve_accessible_collection_ids
 from app.services.event_service import get_event_hub
 from app.services.exceptions import IntakeValidationError, StorageUploadError
+from app.services.opensearch_document_index import delete_document_from_index_sync
 from app.services.queue_service import enqueue_fetch_url_ingest_sync, enqueue_process_document_sync
 from app.services.storage_service import ObjectStorage, build_raw_object_key, get_object_storage
 
@@ -345,6 +346,8 @@ def delete_document_for_user(
                 key,
                 e,
             )
+
+    delete_document_from_index_sync(document_id, settings=settings)
 
     if not doc_repo.delete_document_row(session, document_id):
         return False

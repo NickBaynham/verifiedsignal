@@ -90,6 +90,7 @@ def get_document(
     return DocumentDetailOut(
         **base.model_dump(),
         sources=[DocumentSourceOut.model_validate(s) for s in sources],
+        body_text=doc.body_text,
     )
 
 

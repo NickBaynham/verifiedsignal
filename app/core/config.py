@@ -108,6 +108,15 @@ class Settings(BaseSettings):
         default="http://localhost:9200",
         validation_alias="OPENSEARCH_URL",
     )
+    opensearch_index_name: str = Field(
+        default="verifiedsignal_documents",
+        validation_alias="OPENSEARCH_INDEX_NAME",
+    )
+    # When true, index + search use in-memory dict (tests / no OpenSearch container).
+    use_fake_opensearch: bool = Field(
+        default=False,
+        validation_alias="USE_FAKE_OPENSEARCH",
+    )
 
     # Must match worker `WorkerSettings.queue_name` / `VERIFIEDSIGNAL_ARQ_QUEUE`.
     arq_queue_name: str = Field(

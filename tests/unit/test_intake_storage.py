@@ -36,6 +36,20 @@ def test_in_memory_storage_roundtrip():
 
 
 @pytest.mark.unit
+def test_in_memory_get_bytes_roundtrip():
+    store = InMemoryObjectStorage(bucket="b1")
+    store.upload_bytes("k", b"payload", None)
+    assert store.get_bytes("k") == b"payload"
+
+
+@pytest.mark.unit
+def test_in_memory_get_bytes_missing_raises():
+    store = InMemoryObjectStorage(bucket="b1")
+    with pytest.raises(KeyError):
+        store.get_bytes("missing")
+
+
+@pytest.mark.unit
 def test_in_memory_delete_object_idempotent():
     store = InMemoryObjectStorage(bucket="b1")
     store.upload_bytes("k", b"x", None)

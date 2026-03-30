@@ -1,23 +1,41 @@
 # Search and live updates
 
-## Search
+## Search (`GET /api/v1/search`)
 
-**`GET /api/v1/search?q=...&limit=...`**
+**Query parameters:**
 
-- **`q`** — search text (can be empty; max length enforced by the server)
-- **`limit`** — 1–100, default 10
+- **`q`** — search text (can be empty; up to 2000 characters). Empty **`q`** returns a limited **match-all** slice of the index (useful for sanity checks, not a full catalog API).
+- **`limit`** — number of hits (1–100, default 10).
 
-**Auth today:** the route accepts requests **with or without** a Bearer token. The principal is not yet used to filter results in the stub implementation.
+**Auth:** the route accepts calls **with or without** a Bearer token today; results are **not** filtered per user in this phase—treat deployments accordingly until ACL-aware search is added.
 
-### Current behavior (preview)
+### How results are produced
 
-The implementation is a **placeholder** until OpenSearch is fully wired:
+1. When a document is **uploaded** or ingested by URL, raw bytes live in **object storage**.
+2. The **worker** runs the **`extract`** pipeline stage: it reads those bytes and, for common **text-like** types (`text/plain`, `text/markdown`, `application/json`, `text/html`, other `text/*`, and a small UTF-8 heuristic), stores **plain text** in Postgres as **`documents.body_text`**.
+3. The **`index`** stage sends **title**, **`body_text`**, **collection id**, and **status** to **OpenSearch** under the index name from **`OPENSEARCH_INDEX_NAME`** (default **`verifiedsignal_documents`**).
+4. **`GET /api/v1/search`** runs a **keyword** query (`multi_match` on **title** and **body_text**).
 
-- **`hits`** is usually an empty list
-- **`index_status`** is **`stub`**
-- **`message`** explains that the index is disposable and rebuildable from Postgres
+**Vectors / semantic search** are not implemented yet; the same pipeline can be extended later (separate dense-vector field + kNN query).
 
-You can still call the endpoint to **verify connectivity** and to keep client code ready for real results later.
+### Index status in the JSON response
+
+| `index_status` | Meaning |
+|----------------|---------|
+| **`ok`** | OpenSearch returned HTTP 200 for the search request. |
+| **`fake`** | **`USE_FAKE_OPENSEARCH=true`** (typical in automated tests): in-memory index, substring match. |
+| **`error`** | OpenSearch error (see **`message`**). |
+
+Each hit includes **`document_id`**, **`title`**, **`score`**, and a short **`snippet`** from the body.
+
+### Viewing extracted text
+
+**`GET /api/v1/documents/{id}`** includes **`body_text`** when the worker has finished **extract** (may be **`null`** for unsupported binaries or before the pipeline runs).
+
+### Operations requirements
+
+- **Worker** must run (`pdm run worker`) with **`USE_FAKE_QUEUE=false`** so **`process_document`** jobs execute after intake.
+- **OpenSearch** must be reachable at **`OPENSEARCH_URL`** (for example Compose service on port **9200**), unless you use **`USE_FAKE_OPENSEARCH=true`** (dev/tests only).
 
 ## Live updates (Server-Sent Events)
 
@@ -53,4 +71,4 @@ Handle **`onerror`** to reconnect with backoff if the network drops.
 ## Next steps
 
 - [Status and troubleshooting](status-and-troubleshooting.md)
-- [Documents](documents.md) — what happens before `document_queued` fires
+- [Documents](documents.md)

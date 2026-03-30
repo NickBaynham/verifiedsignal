@@ -9,7 +9,7 @@ VerifiedSignal is a **document intelligence platform** under active development.
 - **Background processing** (a worker queue runs a pipeline scaffold on each document).
 - **APIs** to list and inspect documents, check service health, and (later) search an index derived from your data.
 
-The canonical copy of document metadata lives in **PostgreSQL**; **OpenSearch** is intended for search and is not fully connected yet.
+The canonical copy of document metadata lives in **PostgreSQL**; **OpenSearch** holds a **derived keyword index** built by the worker from **extracted plain text** (`documents.body_text`). See [Search and live updates](search-and-events.md).
 
 ## How you interact with the product
 

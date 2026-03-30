@@ -1,6 +1,6 @@
 # VerifiedSignal — guide for end users
 
-This folder describes what you can do with the product **as it exists today**: HTTP API, optional web UI demo, and background processing. The app is still an **early scaffold**—some features return placeholder data until OpenSearch and richer UI are wired in.
+This folder describes what you can do with the product **as it exists today**: HTTP API, optional web UI demo, and background processing. **Keyword search** is wired to **OpenSearch** (or a test-only in-memory stand-in); semantic / vector search and richer UI are still evolving.
 
 ## Who this is for
 

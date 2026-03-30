@@ -18,7 +18,7 @@ def database_url() -> str:
     url = _database_url()
     if not url:
         pytest.skip(
-            "DATABASE_URL not set — integration tests need Postgres with migrations 001 and 002 "
+            "DATABASE_URL not set — integration tests need Postgres with migrations 001–003 "
             "applied (see db/README.md)."
         )
     return url
@@ -28,21 +28,24 @@ def database_url() -> str:
 def intake_api_client(monkeypatch, database_url: str):
     """
     FastAPI client with real Postgres (DATABASE_URL), fake queue, and in-memory object storage.
-    Use for POST /documents intake tests; requires migrations 001 + 002 applied.
+    Use for POST /documents intake tests; requires migrations 001 + 002 + 003 applied.
     """
     monkeypatch.setenv("DATABASE_URL", database_url)
     monkeypatch.setenv("USE_FAKE_QUEUE", "true")
     monkeypatch.setenv("USE_FAKE_STORAGE", "true")
+    monkeypatch.setenv("USE_FAKE_OPENSEARCH", "true")
 
     from app.auth.dependencies import get_current_user
     from app.core.config import reset_settings_cache
     from app.db.session import reset_engine
     from app.main import create_app
     from app.services.event_service import reset_event_hub
+    from app.services.opensearch_document_index import reset_fake_opensearch_index
     from app.services.queue_backend import close_job_queue
     from app.services.storage_service import reset_object_storage
     from fastapi.testclient import TestClient
 
+    reset_fake_opensearch_index()
     reset_settings_cache()
     reset_object_storage()
     reset_engine()
@@ -62,6 +65,7 @@ def intake_api_client(monkeypatch, database_url: str):
     reset_engine()
     reset_event_hub()
     reset_object_storage()
+    reset_fake_opensearch_index()
     reset_settings_cache()
 
 

@@ -18,14 +18,17 @@ def api_client(monkeypatch):
     """
     monkeypatch.setenv("USE_FAKE_QUEUE", "true")
     monkeypatch.setenv("USE_FAKE_STORAGE", "true")
+    monkeypatch.setenv("USE_FAKE_OPENSEARCH", "true")
 
     from app.core.config import reset_settings_cache
     from app.db.session import DatabaseHealthResult, reset_engine
     from app.main import create_app
     from app.services.event_service import reset_event_hub
+    from app.services.opensearch_document_index import reset_fake_opensearch_index
     from app.services.queue_backend import close_job_queue
     from app.services.storage_service import reset_object_storage
 
+    reset_fake_opensearch_index()
     reset_settings_cache()
     reset_object_storage()
     monkeypatch.setattr(
@@ -56,6 +59,7 @@ def api_client(monkeypatch):
     reset_engine()
     reset_event_hub()
     reset_object_storage()
+    reset_fake_opensearch_index()
     reset_settings_cache()
 
 
@@ -64,7 +68,7 @@ def jwt_integration_client(monkeypatch: pytest.MonkeyPatch):
     """
     FastAPI TestClient with real Postgres, no `get_current_user` override — uses signed JWTs.
 
-    Skips when DATABASE_URL is unset. Requires migrations 001 + 002 applied.
+    Skips when DATABASE_URL is unset. Requires migrations 001–003 applied.
     Yields (client, make_token) where make_token(sub=..., email=...) returns a Bearer string value.
     """
     database_url = os.environ.get("DATABASE_URL")

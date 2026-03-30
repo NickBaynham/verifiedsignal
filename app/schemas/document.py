@@ -88,6 +88,10 @@ class DocumentSummaryOut(BaseModel):
 
 class DocumentDetailOut(DocumentSummaryOut):
     sources: list[DocumentSourceOut] = Field(default_factory=list)
+    body_text: str | None = Field(
+        default=None,
+        description="Plain text extracted for search (omitted in list responses).",
+    )
 
 
 class DocumentListResponse(BaseModel):

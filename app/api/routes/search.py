@@ -1,4 +1,4 @@
-"""Search API (OpenSearch-backed when implemented)."""
+"""Search API: keyword query over OpenSearch (or in-memory fake when configured)."""
 
 from __future__ import annotations
 

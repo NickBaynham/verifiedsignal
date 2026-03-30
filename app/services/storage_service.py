@@ -56,6 +56,8 @@ class ObjectStorage(Protocol):
 
     def delete_object(self, key: str) -> None: ...
 
+    def get_bytes(self, key: str) -> bytes: ...
+
 
 class InMemoryObjectStorage:
     """Test / local dev without MinIO."""
@@ -80,6 +82,11 @@ class InMemoryObjectStorage:
 
     def delete_object(self, key: str) -> None:
         self.objects.pop(key, None)
+
+    def get_bytes(self, key: str) -> bytes:
+        if key not in self.objects:
+            raise KeyError(key)
+        return self.objects[key]
 
 
 class S3ObjectStorage:
@@ -156,6 +163,18 @@ class S3ObjectStorage:
             if code in ("404", "NoSuchKey", "NotFound"):
                 return
             raise StorageUploadError(f"delete object failed: {e}") from e
+        except BotoCoreError as e:
+            raise StorageUploadError(str(e)) from e
+
+    def get_bytes(self, key: str) -> bytes:
+        try:
+            resp = self._client.get_object(Bucket=self._bucket, Key=key)
+            return resp["Body"].read()
+        except ClientError as e:
+            code = e.response.get("Error", {}).get("Code", "")
+            if code in ("404", "NoSuchKey", "NotFound"):
+                raise KeyError(key) from e
+            raise StorageUploadError(f"get object failed: {e}") from e
         except BotoCoreError as e:
             raise StorageUploadError(str(e)) from e
 

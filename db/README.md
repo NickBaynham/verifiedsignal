@@ -10,8 +10,10 @@ This directory holds **canonical** schema definitions for VerifiedSignal. The ap
 | `migrations/001_initial_schema.down.sql` | Drops those objects (destructive). |
 | `migrations/002_intake_document_fields.up.sql` | Intake columns on **`documents`**, expanded **`documents.status`** check, **`document_sources`**-ready lifecycle; seeds **`local-dev`** org and **`default-inbox`** collection for local UUIDs. |
 | `migrations/002_intake_document_fields.down.sql` | Rollback (destructive; removes seeded rows by id/slug). |
+| `migrations/003_document_body_text.up.sql` | Adds **`documents.body_text`** for extracted plain text (keyword search path). |
+| `migrations/003_document_body_text.down.sql` | Drops **`body_text`**. |
 
-**Planned (not yet a committed migration file):** document metadata and tagging — see **[`docs/document-metadata-design.md`](../docs/document-metadata-design.md)** for the full design and appendix DDL sketch (`user_metadata`, `analysis_metadata`, `document_tags`).
+**Planned (design only):** richer document metadata and tagging — **[`docs/document-metadata-design.md`](../docs/document-metadata-design.md)** (`user_metadata`, `analysis_metadata`, `document_tags`).
 
 ### Applying manually
 
@@ -21,12 +23,14 @@ From the repo root, with **Docker Compose Postgres** already running (`docker co
 make migrate
 ```
 
-That applies **001** then **002** via `docker compose exec` (same as below).
+That applies **001**, **002**, and **003** via `docker compose exec` (same as below).
 
-**`relation "users" already exists`:** **001** is already applied. Either you only need **002**:
+**`relation "users" already exists`:** **001** is already applied. Either you only need **002** or **003**:
 
 ```bash
 make migrate-002
+# or, when 001+002 are applied but body_text is missing:
+make migrate-003
 ```
 
 or the database is fully migrated already and you can ignore the error. To wipe dev data and re-run both migrations:
@@ -41,6 +45,7 @@ With Docker Compose Postgres (from the repo root):
 docker compose up -d postgres
 docker compose exec -T postgres psql -U verifiedsignal -d verifiedsignal -v ON_ERROR_STOP=1 < db/migrations/001_initial_schema.up.sql
 docker compose exec -T postgres psql -U verifiedsignal -d verifiedsignal -v ON_ERROR_STOP=1 < db/migrations/002_intake_document_fields.up.sql
+docker compose exec -T postgres psql -U verifiedsignal -d verifiedsignal -v ON_ERROR_STOP=1 < db/migrations/003_document_body_text.up.sql
 ```
 
 Or from a host with `psql`:
@@ -48,6 +53,7 @@ Or from a host with `psql`:
 ```bash
 psql "postgresql://verifiedsignal:verifiedsignal@localhost:5432/verifiedsignal" -v ON_ERROR_STOP=1 -f db/migrations/001_initial_schema.up.sql
 psql "postgresql://verifiedsignal:verifiedsignal@localhost:5432/verifiedsignal" -v ON_ERROR_STOP=1 -f db/migrations/002_intake_document_fields.up.sql
+psql "postgresql://verifiedsignal:verifiedsignal@localhost:5432/verifiedsignal" -v ON_ERROR_STOP=1 -f db/migrations/003_document_body_text.up.sql
 ```
 
 Rollback (destructive):
@@ -67,7 +73,7 @@ After migrations are applied, **`pytest -m integration`** (see [`tests/README.md
 - **users** — Actors in the system; **organization_members** links users to **organizations** with a role (`owner`, `admin`, `member`, `viewer`).
 - **organizations** — Tenant boundary; owns **collections**.
 - **collections** — Groups **documents** under an org (`UNIQUE (organization_id, slug)`).
-- **documents** — Logical documents; intended OpenSearch document id = `documents.id` for straightforward full reindex.
+- **documents** — Logical documents; **`body_text`** holds extracted plain text for keyword search; OpenSearch document id = `documents.id` for reindex.
 - **document_sources** — Many sources per document (URL, upload, API, etc.) with `raw_metadata` JSONB.
 - **pipeline_runs** — One pipeline execution per document (name/version, `status`, `stage`, timing, errors).
 - **pipeline_events** — Append-style log lines per run (`step_index` + `event_type` + `payload` JSONB).

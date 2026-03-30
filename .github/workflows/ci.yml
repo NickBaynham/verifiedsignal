@@ -63,6 +63,7 @@ jobs:
           done
           psql -v ON_ERROR_STOP=1 -f db/migrations/001_initial_schema.up.sql
           psql -v ON_ERROR_STOP=1 -f db/migrations/002_intake_document_fields.up.sql
+          psql -v ON_ERROR_STOP=1 -f db/migrations/003_document_body_text.up.sql
           psql -c "SELECT 1"
 
       - name: Ruff
