@@ -31,6 +31,7 @@ You only see documents in **collections your account can access** (see [Workspac
 | **`file`** | yes | The file to store |
 | **`collection_id`** | no* | UUID string of the target collection |
 | **`title`** | no | Display title; defaults to the filename |
+| **`metadata`** | no | JSON **object** as a string, e.g. `{"tags":["finance"],"label":"Q1"}`. Stored on **`user_metadata`** and used for search filters/facets after indexing. |
 
 \*If your deployment disables the default-collection shortcut, **`collection_id` becomes required**—the API will say so in the error message.
 
@@ -59,6 +60,7 @@ You only see documents in **collections your account can access** (see [Workspac
 | **`url`** | yes | HTTPS URL to fetch (HTTP may be allowed only in some dev setups) |
 | **`collection_id`** | no* | Same as file upload |
 | **`title`** | no | Overrides title inferred from the URL path |
+| **`metadata`** | no | Same convention as multipart **`metadata`** (JSON object); stored on **`user_metadata`**. |
 
 \*Same **`collection_id`** rules as multipart upload.
 
@@ -81,7 +83,7 @@ You only see documents in **collections your account can access** (see [Workspac
 **`GET /api/v1/documents/{document_id}`**  
 `document_id` is a UUID.
 
-**Response (JSON):** same fields as list items, plus **`sources`** — provenance rows (e.g. **`upload`**, **`url`**) with locators, MIME types, and byte lengths when known.
+**Response (JSON):** same fields as list items, plus **`user_metadata`** (client JSON from intake), **`sources`** — provenance rows (e.g. **`upload`**, **`url`**) with locators, MIME types, and byte lengths when known, and **`body_text`** when extract has run.
 
 **404** means the id does not exist **or** you do not have access.
 

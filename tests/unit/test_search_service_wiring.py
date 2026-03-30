@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import uuid
+from unittest.mock import MagicMock
 
 import pytest
 from app.core.config import reset_settings_cache
@@ -27,8 +28,51 @@ def test_search_documents_fake_keyword_match(monkeypatch: pytest.MonkeyPatch) ->
         status="completed",
     )
 
-    out = asyncio.run(search_documents("revenue", limit=10))
+    db = MagicMock()
+    out = asyncio.run(search_documents(db, None, "revenue", limit=10))
     assert out["index_status"] == "fake"
     assert out["total"] == 1
     assert out["hits"][0]["document_id"] == str(did)
     assert "revenue" in (out["hits"][0].get("snippet") or "")
+
+
+@pytest.mark.unit
+def test_search_fake_filter_by_tag_and_metadata_text(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("USE_FAKE_OPENSEARCH", "true")
+    reset_settings_cache()
+    reset_fake_opensearch_index()
+
+    a = uuid.uuid4()
+    b = uuid.uuid4()
+    cid = uuid.uuid4()
+    index_document_sync(
+        document_id=a,
+        collection_id=cid,
+        title="One",
+        body_text="alpha",
+        status="completed",
+        tags=["finance", "q1"],
+        metadata_text="acme corp",
+    )
+    index_document_sync(
+        document_id=b,
+        collection_id=cid,
+        title="Two",
+        body_text="beta",
+        status="completed",
+        tags=["legal"],
+        metadata_text="other",
+    )
+
+    db = MagicMock()
+    out = asyncio.run(
+        search_documents(db, None, "", limit=10, tags=["finance"], ingest_source="upload")
+    )
+    assert out["total"] == 1
+    assert out["hits"][0]["document_id"] == str(a)
+
+    out2 = asyncio.run(search_documents(db, None, "acme", limit=10))
+    assert out2["total"] == 1
+    assert out2["hits"][0]["document_id"] == str(a)

@@ -28,6 +28,7 @@ from app.services.document_service import (
 )
 from app.services.exceptions import IntakeValidationError, StorageUploadError
 from app.services.storage_service import ObjectStorage
+from app.services.user_metadata import parse_metadata_json_string, validate_user_metadata
 
 router = APIRouter(prefix="/documents", tags=["documents"])
 
@@ -68,6 +69,7 @@ def ingest_document_from_url(
             raw_url=body.url,
             collection_id_param=body.collection_id,
             title=body.title,
+            user_metadata=body.metadata,
         )
     except IntakeValidationError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
@@ -126,6 +128,10 @@ def upload_document(
         default=None,
         description="Optional display title (defaults to filename)",
     ),
+    metadata: str | None = Form(
+        default=None,
+        description='Optional JSON object, e.g. {"tags":["finance"],"label":"report"}',
+    ),
     db: Session = Depends(get_db),
     storage: ObjectStorage = Depends(get_object_storage_dep),
     _user_id: str = Depends(get_current_user),
@@ -139,6 +145,7 @@ def upload_document(
     _ = _user_id
     raw = file.file.read()
     try:
+        um = validate_user_metadata(parse_metadata_json_string(metadata))
         payload = run_file_intake(
             db,
             file_bytes=raw,
@@ -146,6 +153,7 @@ def upload_document(
             content_type=file.content_type,
             title=title,
             collection_id_param=collection_id,
+            user_metadata=um,
             storage=storage,
         )
     except IntakeValidationError as e:

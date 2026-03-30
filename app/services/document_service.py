@@ -31,6 +31,7 @@ from app.services.exceptions import IntakeValidationError, StorageUploadError
 from app.services.opensearch_document_index import delete_document_from_index_sync
 from app.services.queue_service import enqueue_fetch_url_ingest_sync, enqueue_process_document_sync
 from app.services.storage_service import ObjectStorage, build_raw_object_key, get_object_storage
+from app.services.user_metadata import validate_user_metadata
 
 log = logging.getLogger("verifiedsignal.intake")
 
@@ -70,6 +71,7 @@ def run_file_intake(
     content_type: str | None,
     title: str | None,
     collection_id_param: str | None,
+    user_metadata: dict | None = None,
     storage: ObjectStorage | None = None,
     settings: Settings | None = None,
 ) -> dict:
@@ -86,6 +88,7 @@ def run_file_intake(
 
     _read_upload_to_limit(file_bytes, max_bytes=settings.max_upload_bytes)
     collection_id = resolve_collection_id(collection_id_param, settings)
+    meta = validate_user_metadata(user_metadata)
 
     document_id = uuid.uuid4()
     storage_key = build_raw_object_key(document_id, name)
@@ -106,6 +109,7 @@ def run_file_intake(
         content_type=content_type,
         file_size=len(file_bytes),
         title=title,
+        user_metadata=meta,
     )
     session.commit()
 
@@ -219,6 +223,7 @@ def run_file_intake_from_bytesio(
         content_type=content_type,
         title=title,
         collection_id_param=collection_id_param,
+        user_metadata=None,
         storage=storage,
         settings=settings,
     )
@@ -230,6 +235,7 @@ def run_url_intake_submit(
     raw_url: str,
     collection_id_param: str | None,
     title: str | None,
+    user_metadata: dict | None = None,
     settings: Settings | None = None,
 ) -> dict:
     """
@@ -247,6 +253,7 @@ def run_url_intake_submit(
 
     canonical = validate_url_for_ingest(raw_url, settings)
     collection_id = resolve_collection_id(collection_id_param, settings)
+    meta = validate_user_metadata(user_metadata)
 
     path = urlparse(canonical).path.rstrip("/")
     segment = path.rsplit("/", 1)[-1] if path else ""
@@ -263,6 +270,7 @@ def run_url_intake_submit(
         original_filename=safe_name,
         title=title,
         canonical_url=canonical,
+        user_metadata=meta,
     )
     session.commit()
 

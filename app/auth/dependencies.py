@@ -48,3 +48,34 @@ async def get_current_user(
         db.commit()
 
     return claims.sub
+
+
+async def get_optional_current_user_sub(
+    request: Request,
+    credentials: HTTPAuthorizationCredentials | None = Depends(bearer),
+    db: Session = Depends(get_db),
+    settings: Settings = Depends(get_settings),
+) -> str | None:
+    """
+    Bearer JWT → auth ``sub`` string; missing header → ``None`` (no collection ACL on search).
+
+    Invalid or expired token → 401 (only when Authorization is sent).
+    """
+    if credentials is None or not credentials.credentials:
+        return None
+    try:
+        claims = decode_access_token_claims(credentials.credentials, settings)
+    except JWTError:
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid or expired token",
+            headers={"WWW-Authenticate": "Bearer"},
+        ) from None
+
+    request.state.vs_claims = claims
+
+    _, created = ensure_personal_tenant_for_claims(db, claims, settings)
+    if created:
+        db.commit()
+
+    return claims.sub

@@ -14,3 +14,10 @@ class SearchResponse(BaseModel):
     total: int = 0
     index_status: str
     message: str | None = None
+    facets: dict[str, Any] | None = Field(
+        default=None,
+        description=(
+            "Facet buckets when include_facets=true "
+            "(ingest_source, status, content_type, tags)."
+        ),
+    )

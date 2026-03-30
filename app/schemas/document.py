@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -17,6 +18,12 @@ class UrlIntakeRequest(BaseModel):
         description="Target collection UUID; defaults to VERIFIEDSIGNAL_DEFAULT_COLLECTION_ID",
     )
     title: str | None = Field(default=None, max_length=2048)
+    metadata: dict[str, Any] | None = Field(
+        default=None,
+        description=(
+            'Optional object (e.g. {"tags":["finance"],"label":"x"}) stored on the document.'
+        ),
+    )
 
 
 class UrlIntakeResponse(BaseModel):
@@ -82,6 +89,7 @@ class DocumentSummaryOut(BaseModel):
     storage_key: str | None = None
     ingest_error: str | None = None
     enqueue_error: str | None = None
+    user_metadata: dict[str, Any] = Field(default_factory=dict)
     created_at: datetime
     updated_at: datetime
 

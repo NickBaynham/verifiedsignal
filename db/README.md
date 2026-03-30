@@ -14,8 +14,10 @@ This directory holds **canonical** schema definitions for VerifiedSignal. The ap
 | `migrations/003_document_body_text.down.sql` | Drops **`body_text`**. |
 | `migrations/004_document_extract_artifact.up.sql` | Adds **`documents.extract_artifact_key`** (object key for full extracted UTF-8 text). |
 | `migrations/004_document_extract_artifact.down.sql` | Drops **`extract_artifact_key`**. |
+| `migrations/005_documents_user_metadata.up.sql` | Adds **`documents.user_metadata`** JSONB (client intake metadata; GIN index). |
+| `migrations/005_documents_user_metadata.down.sql` | Drops **`user_metadata`**. |
 
-**Planned (design only):** richer document metadata and tagging — **[`docs/document-metadata-design.md`](../docs/document-metadata-design.md)** (`user_metadata`, `analysis_metadata`, `document_tags`).
+**Planned (design only):** further metadata layers — **[`docs/document-metadata-design.md`](../docs/document-metadata-design.md)** (`analysis_metadata`, `document_tags`, etc.). **`user_metadata`** is implemented in **005** for intake + search.
 
 ### Applying manually
 
@@ -25,9 +27,9 @@ From the repo root, with **Docker Compose Postgres** already running (`docker co
 make migrate
 ```
 
-That applies **001** through **004** via `docker compose exec` (same as below).
+That applies **001** through **005** via `docker compose exec` (same as below).
 
-**`relation "users" already exists`:** **001** is already applied. You may only need **002**, **003**, or **004**:
+**`relation "users" already exists`:** **001** is already applied. You may only need **002**–**005**:
 
 ```bash
 make migrate-002
@@ -35,6 +37,8 @@ make migrate-002
 make migrate-003
 # or, when 001–003 are applied but extract_artifact_key is missing:
 make migrate-004
+# or, when 001–004 are applied but user_metadata is missing:
+make migrate-005
 ```
 
 or the database is fully migrated already and you can ignore the error. To wipe dev data and re-run migrations:
@@ -51,6 +55,7 @@ docker compose exec -T postgres psql -U verifiedsignal -d verifiedsignal -v ON_E
 docker compose exec -T postgres psql -U verifiedsignal -d verifiedsignal -v ON_ERROR_STOP=1 < db/migrations/002_intake_document_fields.up.sql
 docker compose exec -T postgres psql -U verifiedsignal -d verifiedsignal -v ON_ERROR_STOP=1 < db/migrations/003_document_body_text.up.sql
 docker compose exec -T postgres psql -U verifiedsignal -d verifiedsignal -v ON_ERROR_STOP=1 < db/migrations/004_document_extract_artifact.up.sql
+docker compose exec -T postgres psql -U verifiedsignal -d verifiedsignal -v ON_ERROR_STOP=1 < db/migrations/005_documents_user_metadata.up.sql
 ```
 
 Or from a host with `psql`:
@@ -60,6 +65,7 @@ psql "postgresql://verifiedsignal:verifiedsignal@localhost:5432/verifiedsignal" 
 psql "postgresql://verifiedsignal:verifiedsignal@localhost:5432/verifiedsignal" -v ON_ERROR_STOP=1 -f db/migrations/002_intake_document_fields.up.sql
 psql "postgresql://verifiedsignal:verifiedsignal@localhost:5432/verifiedsignal" -v ON_ERROR_STOP=1 -f db/migrations/003_document_body_text.up.sql
 psql "postgresql://verifiedsignal:verifiedsignal@localhost:5432/verifiedsignal" -v ON_ERROR_STOP=1 -f db/migrations/004_document_extract_artifact.up.sql
+psql "postgresql://verifiedsignal:verifiedsignal@localhost:5432/verifiedsignal" -v ON_ERROR_STOP=1 -f db/migrations/005_documents_user_metadata.up.sql
 ```
 
 Rollback (destructive):
@@ -79,7 +85,7 @@ After migrations are applied, **`pytest -m integration`** (see [`tests/README.md
 - **users** — Actors in the system; **organization_members** links users to **organizations** with a role (`owner`, `admin`, `member`, `viewer`).
 - **organizations** — Tenant boundary; owns **collections**.
 - **collections** — Groups **documents** under an org (`UNIQUE (organization_id, slug)`).
-- **documents** — Logical documents; **`body_text`** holds extracted plain text (truncated) for keyword search; **`extract_artifact_key`** points at full extracted UTF-8 in object storage; OpenSearch document id = `documents.id` for reindex.
+- **documents** — Logical documents; **`body_text`** holds extracted plain text (truncated) for keyword search; **`extract_artifact_key`** points at full extracted UTF-8 in object storage; **`user_metadata`** JSONB for client tags/labels (indexed for search); OpenSearch document id = `documents.id` for reindex.
 - **document_sources** — Many sources per document (URL, upload, API, etc.) with `raw_metadata` JSONB.
 - **pipeline_runs** — One pipeline execution per document (name/version, `status`, `stage`, timing, errors).
 - **pipeline_events** — Append-style log lines per run (`step_index` + `event_type` + `payload` JSONB).

@@ -23,6 +23,7 @@ def create_intake_row_created(
     content_type: str | None,
     file_size: int,
     title: str | None,
+    user_metadata: dict | None = None,
 ) -> Document:
     """
     Insert canonical row in `created` before object storage upload completes.
@@ -39,6 +40,7 @@ def create_intake_row_created(
         content_type=content_type,
         file_size=file_size,
         row_schema_version=2,
+        user_metadata=user_metadata or {},
     )
     session.add(doc)
     session.flush()
@@ -53,6 +55,7 @@ def create_url_intake_row(
     original_filename: str,
     title: str | None,
     canonical_url: str,
+    user_metadata: dict | None = None,
 ) -> Document:
     """
     Insert `documents` (`created`, no storage yet) plus a `document_sources` row (`url`).
@@ -68,6 +71,7 @@ def create_url_intake_row(
         content_type=None,
         file_size=None,
         row_schema_version=2,
+        user_metadata=user_metadata or {},
     )
     session.add(doc)
     session.flush()

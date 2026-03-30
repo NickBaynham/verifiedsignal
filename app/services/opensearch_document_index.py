@@ -1,5 +1,5 @@
 """
-OpenSearch index for documents (keyword fields). Supports in-memory fake for tests.
+OpenSearch index for documents (text + metadata keyword fields). In-memory fake for tests.
 """
 
 from __future__ import annotations
@@ -7,11 +7,17 @@ from __future__ import annotations
 import logging
 import threading
 import uuid
+from collections import Counter
 from typing import Any
 
 import httpx
 
 from app.core.config import Settings, get_settings
+from app.services.search_filters import (
+    SearchFilters,
+    fake_doc_matches_filters,
+    opensearch_filter_clauses,
+)
 
 log = logging.getLogger("verifiedsignal.opensearch")
 
@@ -31,25 +37,31 @@ def _index_url(settings: Settings) -> str:
     return f"{base}/{name}"
 
 
+def _base_mapping_properties() -> dict[str, Any]:
+    return {
+        "document_id": {"type": "keyword"},
+        "collection_id": {"type": "keyword"},
+        "title": {"type": "text"},
+        "body_text": {"type": "text"},
+        "status": {"type": "keyword"},
+        "content_type": {"type": "keyword"},
+        "original_filename": {"type": "keyword"},
+        "ingest_source": {"type": "keyword"},
+        "tags": {"type": "keyword"},
+        "metadata_label": {"type": "keyword"},
+        "metadata_text": {"type": "text"},
+    }
+
+
 def ensure_index_and_mapping(settings: Settings | None = None) -> None:
-    """Create index with mapping if missing (no-op for fake mode)."""
+    """Create index with mapping if missing; merge new properties on existing index (no-op fake)."""
     settings = settings or get_settings()
     if settings.use_fake_opensearch:
         return
 
     base = settings.opensearch_url.rstrip("/")
     name = settings.opensearch_index_name.strip() or "verifiedsignal_documents"
-    mapping = {
-        "mappings": {
-            "properties": {
-                "document_id": {"type": "keyword"},
-                "collection_id": {"type": "keyword"},
-                "title": {"type": "text"},
-                "body_text": {"type": "text"},
-                "status": {"type": "keyword"},
-            }
-        }
-    }
+    mapping = {"mappings": {"properties": _base_mapping_properties()}}
     url = f"{base}/{name}"
     with httpx.Client(timeout=30.0) as client:
         r = client.put(url, json=mapping)
@@ -61,8 +73,17 @@ def ensure_index_and_mapping(settings: Settings | None = None) -> None:
             body = {}
         err = body.get("error", {})
         if r.status_code == 400 and err.get("type") == "resource_already_exists_exception":
+            pass
+        else:
+            log.warning(
+                "opensearch_create_index_failed status=%s body=%s",
+                r.status_code,
+                r.text[:500],
+            )
             return
-        log.warning("opensearch_create_index_failed status=%s body=%s", r.status_code, r.text[:500])
+        mr = client.put(f"{url}/_mapping", json={"properties": _base_mapping_properties()})
+        if mr.status_code not in (200,):
+            log.debug("opensearch_merge_mapping status=%s text=%s", mr.status_code, mr.text[:300])
 
 
 def index_document_sync(
@@ -73,15 +94,28 @@ def index_document_sync(
     body_text: str | None,
     status: str,
     settings: Settings | None = None,
+    content_type: str | None = None,
+    original_filename: str | None = None,
+    ingest_source: str = "upload",
+    tags: list[str] | None = None,
+    metadata_label: str | None = None,
+    metadata_text: str = "",
 ) -> None:
     settings = settings or get_settings()
     doc_id = str(document_id)
-    payload = {
+    tag_list = tags or []
+    payload: dict[str, Any] = {
         "document_id": doc_id,
         "collection_id": str(collection_id),
         "title": title or "",
         "body_text": body_text or "",
         "status": status,
+        "content_type": content_type or "",
+        "original_filename": original_filename or "",
+        "ingest_source": ingest_source,
+        "tags": tag_list,
+        "metadata_label": metadata_label or "",
+        "metadata_text": metadata_text or "",
     }
     if settings.use_fake_opensearch:
         with _fake_lock:
@@ -123,36 +157,54 @@ def delete_document_from_index_sync(
             )
 
 
-def search_keyword_sync(
+def _bool_query_text(q: str) -> dict[str, Any]:
+    q = (q or "").strip()
+    if q:
+        return {
+            "multi_match": {
+                "query": q,
+                "fields": ["title^2", "body_text", "metadata_text"],
+                "type": "best_fields",
+            }
+        }
+    return {"match_all": {}}
+
+
+def search_documents_sync(
     query: str,
     *,
     limit: int,
+    filters: SearchFilters,
+    include_facets: bool = False,
     settings: Settings | None = None,
 ) -> dict[str, Any]:
     """
-    Run keyword search; return dict with hits list and total for SearchResponse.
+    Full-text + metadata filters; optional facet aggregations on source, status, type, tags.
     """
     settings = settings or get_settings()
     lim = max(1, min(limit, 100))
 
     if settings.use_fake_opensearch:
-        return _search_fake(query, lim)
+        return _search_fake(query, lim, filters, include_facets)
 
     ensure_index_and_mapping(settings)
-    q = (query or "").strip()
-    if q:
-        body: dict[str, Any] = {
-            "size": lim,
-            "query": {
-                "multi_match": {
-                    "query": q,
-                    "fields": ["title^2", "body_text"],
-                    "type": "best_fields",
-                }
-            },
+    fclauses = opensearch_filter_clauses(filters)
+    must = _bool_query_text(query)
+    bool_q: dict[str, Any] = {"must": [must]}
+    if fclauses:
+        bool_q["filter"] = fclauses
+    body: dict[str, Any] = {
+        "size": lim,
+        "track_total_hits": True,
+        "query": {"bool": bool_q},
+    }
+    if include_facets:
+        body["aggs"] = {
+            "ingest_source": {"terms": {"field": "ingest_source", "size": 10}},
+            "status": {"terms": {"field": "status", "size": 20}},
+            "content_type": {"terms": {"field": "content_type", "size": 30}},
+            "tags": {"terms": {"field": "tags", "size": 50}},
         }
-    else:
-        body = {"size": lim, "query": {"match_all": {}}}
 
     url = f"{_index_url(settings)}/_search"
     with httpx.Client(timeout=30.0) as client:
@@ -163,6 +215,7 @@ def search_keyword_sync(
                 "total": 0,
                 "index_status": "error",
                 "message": f"OpenSearch HTTP {r.status_code}: {r.text[:300]}",
+                "facets": None,
             }
         data = r.json()
     hits_out: list[dict[str, Any]] = []
@@ -174,6 +227,12 @@ def search_keyword_sync(
                 "title": src.get("title"),
                 "score": h.get("_score"),
                 "snippet": (src.get("body_text") or "")[:280],
+                "collection_id": src.get("collection_id"),
+                "ingest_source": src.get("ingest_source"),
+                "content_type": src.get("content_type"),
+                "status": src.get("status"),
+                "tags": src.get("tags") or [],
+                "metadata_label": src.get("metadata_label") or None,
             }
         )
     total = data.get("hits", {}).get("total", 0)
@@ -181,40 +240,114 @@ def search_keyword_sync(
         total_val = int(total.get("value", 0))
     else:
         total_val = int(total or 0)
+
+    facets_out: dict[str, Any] | None = None
+    if include_facets and "aggregations" in data:
+        facets_out = {}
+        for key, spec in data["aggregations"].items():
+            buckets = spec.get("buckets", [])
+            facets_out[key] = [
+                {"key": b.get("key"), "count": b.get("doc_count", 0)}
+                for b in buckets
+            ]
+
     return {
         "hits": hits_out,
         "total": total_val,
         "index_status": "ok",
         "message": None,
+        "facets": facets_out,
     }
 
 
-def _search_fake(query: str, limit: int) -> dict[str, Any]:
+def search_keyword_sync(
+    query: str,
+    *,
+    limit: int,
+    settings: Settings | None = None,
+) -> dict[str, Any]:
+    """Backward-compatible: text search without metadata filters or facets."""
+    out = search_documents_sync(
+        query,
+        limit=limit,
+        filters=SearchFilters(),
+        include_facets=False,
+        settings=settings,
+    )
+    out.pop("facets", None)
+    return out
+
+
+def _search_fake(
+    query: str,
+    limit: int,
+    filters: SearchFilters,
+    include_facets: bool,
+) -> dict[str, Any]:
     q = (query or "").strip().lower()
     with _fake_lock:
         docs = list(_fake_docs.values())
+    filtered = [d for d in docs if fake_doc_matches_filters(d, filters)]
     if not q:
-        ranked = docs[:limit]
+        text_matched = filtered
     else:
-        ranked = []
-        for d in docs:
+        text_matched = []
+        for d in filtered:
             title = (d.get("title") or "").lower()
             body = (d.get("body_text") or "").lower()
-            if q in title or q in body:
-                ranked.append(d)
-        ranked = ranked[:limit]
+            meta = (d.get("metadata_text") or "").lower()
+            if q in title or q in body or q in meta:
+                text_matched.append(d)
+    ranked = text_matched[:limit]
     hits = [
         {
             "document_id": d.get("document_id"),
             "title": d.get("title"),
             "score": 1.0,
             "snippet": (d.get("body_text") or "")[:280],
+            "collection_id": d.get("collection_id"),
+            "ingest_source": d.get("ingest_source"),
+            "content_type": d.get("content_type"),
+            "status": d.get("status"),
+            "tags": d.get("tags") or [],
+            "metadata_label": (d.get("metadata_label") or None) or None,
         }
         for d in ranked
     ]
+    facets_out: dict[str, Any] | None = None
+    if include_facets:
+        facets_out = {
+            "ingest_source": _facet_counts(text_matched, "ingest_source"),
+            "status": _facet_counts(text_matched, "status"),
+            "content_type": _facet_counts(text_matched, "content_type"),
+            "tags": _facet_tag_counts(text_matched),
+        }
     return {
         "hits": hits,
-        "total": len(ranked),
+        "total": len(text_matched),
         "index_status": "fake",
         "message": None,
+        "facets": facets_out,
     }
+
+
+def _facet_counts(docs: list[dict[str, Any]], field: str) -> list[dict[str, Any]]:
+    c: Counter[str] = Counter()
+    for d in docs:
+        v = d.get(field)
+        if v is None or v == "":
+            continue
+        c[str(v)] += 1
+    return [{"key": k, "count": n} for k, n in c.most_common(50)]
+
+
+def _facet_tag_counts(docs: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    c: Counter[str] = Counter()
+    for d in docs:
+        tags = d.get("tags") or []
+        if not isinstance(tags, list):
+            continue
+        for t in tags:
+            if t:
+                c[str(t)] += 1
+    return [{"key": k, "count": n} for k, n in c.most_common(50)]

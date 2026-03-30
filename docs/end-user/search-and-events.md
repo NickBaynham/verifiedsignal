@@ -2,40 +2,63 @@
 
 ## Search (`GET /api/v1/search`)
 
-**Query parameters:**
+### Query parameters
 
-- **`q`** — search text (can be empty; up to 2000 characters). Empty **`q`** returns a limited **match-all** slice of the index (useful for sanity checks, not a full catalog API).
-- **`limit`** — number of hits (1–100, default 10).
+| Parameter | Description |
+|-----------|-------------|
+| **`q`** | Search text (optional; up to 2000 characters). Empty **`q`** runs a **match-all** query (still subject to filters and **`limit`**). |
+| **`limit`** | Hits to return (1–100, default 10). |
+| **`collection_id`** | Optional UUID. **When you send a valid Bearer token**, narrows results to that collection; must be one you can access (**403** if not). Ignored when unauthenticated (callers without a token cannot scope by arbitrary collections). |
+| **`content_type`** | Exact match on indexed MIME type (e.g. `text/plain`, `application/pdf`). |
+| **`status`** | Exact match on document pipeline status (e.g. `completed`, `queued`). |
+| **`ingest_source`** | `upload` or `url` — how the document entered the system (derived from **`document_sources`**). |
+| **`tags`** | Repeat the parameter for **AND** semantics: `?tags=a&tags=b` requires both tags (from **`user_metadata.tags`** at intake). |
+| **`include_facets`** | If `true`, the response includes **`facets`** — bucket counts for **`ingest_source`**, **`status`**, **`content_type`**, and **`tags`** over the current query + filters. |
 
-**Auth:** the route accepts calls **with or without** a Bearer token today; results are **not** filtered per user in this phase—treat deployments accordingly until ACL-aware search is added.
+### Auth and visibility
+
+- **No `Authorization` header:** search behaves like early phases — **no collection ACL** is applied (same global index visibility as before). Do not expose unauthenticated search to confidential corpora.
+- **Valid Bearer JWT:** results are limited to documents in **collections your account can access**. Optional **`collection_id`** further narrows within that set.
+
+Invalid or expired Bearer tokens receive **401**.
 
 ### How results are produced
 
-1. When a document is **uploaded** or ingested by URL, raw bytes live in **object storage**.
-2. The **worker** runs the **`extract`** pipeline stage: it reads those bytes and, for common **text-like** types (`text/plain`, `text/markdown`, `application/json`, `text/html`, other `text/*`, and a small UTF-8 heuristic), stores **plain text** in Postgres as **`documents.body_text`**.
-3. The **`index`** stage sends **title**, **`body_text`**, **collection id**, and **status** to **OpenSearch** under the index name from **`OPENSEARCH_INDEX_NAME`** (default **`verifiedsignal_documents`**).
-4. **`GET /api/v1/search`** runs a **keyword** query (`multi_match` on **title** and **body_text**).
+1. On **upload** or **URL** intake, optional **`metadata`** JSON is stored in Postgres as **`documents.user_metadata`** (convention: **`tags`** string array, **`label`** string).
+2. The worker **extract** stage fills **`documents.body_text`** (and binary extractors where configured).
+3. The **index** stage writes an OpenSearch document with: **`title`**, **`body_text`**, **`metadata_text`** (flattened primitive values from **`user_metadata`** for full-text), **`collection_id`**, **`status`**, **`content_type`**, **`original_filename`**, **`ingest_source`** (`upload` \| `url`), **`tags`**, **`metadata_label`**.
+4. **`GET /api/v1/search`** runs a **`bool`** query: **must** clause is **`multi_match`** on **`title`**, **`body_text`**, **`metadata_text`** (when **`q`** is non-empty), or **`match_all`**; **filter** clauses apply the metadata parameters above.
 
-**Vectors / semantic search** are not implemented yet; the same pipeline can be extended later (separate dense-vector field + kNN query).
+**Semantic / vector search** is not implemented yet; the index can be extended later (dense vector + kNN).
 
-### Index status in the JSON response
+### Response shape
+
+| Field | Meaning |
+|-------|---------|
+| **`query`**, **`limit`** | Echo. |
+| **`hits`** | Each hit includes **`document_id`**, **`title`**, **`score`**, **`snippet`**, and when indexed **`collection_id`**, **`ingest_source`**, **`content_type`**, **`status`**, **`tags`**, **`metadata_label`**. |
+| **`total`** | Total matching documents (track-total-hits style in OpenSearch). |
+| **`index_status`** | `ok` \| `fake` \| `error` |
+| **`message`** | Error detail when **`index_status`** is **`error`**. |
+| **`facets`** | Present when **`include_facets=true`**: object with keys **`ingest_source`**, **`status`**, **`content_type`**, **`tags`**; each maps to a list of `{ "key", "count" }`. |
+
+### Index status values
 
 | `index_status` | Meaning |
 |----------------|---------|
-| **`ok`** | OpenSearch returned HTTP 200 for the search request. |
-| **`fake`** | **`USE_FAKE_OPENSEARCH=true`** (typical in automated tests): in-memory index, substring match. |
+| **`ok`** | OpenSearch returned HTTP 200. |
+| **`fake`** | **`USE_FAKE_OPENSEARCH=true`**: in-memory index (substring match on text fields). |
 | **`error`** | OpenSearch error (see **`message`**). |
 
-Each hit includes **`document_id`**, **`title`**, **`score`**, and a short **`snippet`** from the body.
+### Viewing extracted text and metadata
 
-### Viewing extracted text
-
-**`GET /api/v1/documents/{id}`** includes **`body_text`** when the worker has finished **extract** (may be **`null`** for unsupported binaries or before the pipeline runs).
+**`GET /api/v1/documents/{id}`** includes **`body_text`** and **`user_metadata`** when available.
 
 ### Operations requirements
 
-- **Worker** must run (`pdm run worker`) with **`USE_FAKE_QUEUE=false`** so **`process_document`** jobs execute after intake.
-- **OpenSearch** must be reachable at **`OPENSEARCH_URL`** (for example Compose service on port **9200**), unless you use **`USE_FAKE_OPENSEARCH=true`** (dev/tests only).
+- **Worker** must run (`pdm run worker`) with **`USE_FAKE_QUEUE=false`** so **`process_document`** runs after intake.
+- **OpenSearch** at **`OPENSEARCH_URL`**, or **`USE_FAKE_OPENSEARCH=true`** for tests.
+- After upgrading mappings, existing OpenSearch indices may need a **mapping merge** (the app attempts a merge on startup paths) or a **reindex** in production — see operator notes in **`db/README.md`** (migration **005** adds **`user_metadata`** in Postgres).
 
 ## Live updates (Server-Sent Events)
 

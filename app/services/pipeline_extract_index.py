@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import Settings, get_settings
 from app.db.models import Document
+from app.repositories import document_repository as doc_repo
 from app.repositories import pipeline_repository as pipe_repo
 from app.services.document_content_extract import extract_document_text
 from app.services.document_text_extract import truncate_for_body
@@ -17,6 +18,11 @@ from app.services.storage_service import (
     ObjectStorage,
     build_extract_artifact_key,
     get_object_storage,
+)
+from app.services.user_metadata import (
+    extract_metadata_label,
+    extract_tags_for_index,
+    flatten_metadata_for_search_text,
 )
 
 log = logging.getLogger("verifiedsignal.pipeline.extract_index")
@@ -147,6 +153,12 @@ def index_opensearch_stage(
     doc = session.get(Document, document_id)
     if doc is None:
         return
+    sources = doc_repo.list_sources_for_document(session, document_id)
+    ingest_source = "url" if any(s.source_kind == "url" for s in sources) else "upload"
+    meta = doc.user_metadata or {}
+    tags = extract_tags_for_index(meta)
+    metadata_label = extract_metadata_label(meta)
+    metadata_text = flatten_metadata_for_search_text(meta)
     try:
         index_document_sync(
             document_id=doc.id,
@@ -155,6 +167,12 @@ def index_opensearch_stage(
             body_text=doc.body_text,
             status=doc.status,
             settings=settings,
+            content_type=doc.content_type,
+            original_filename=doc.original_filename,
+            ingest_source=ingest_source,
+            tags=tags,
+            metadata_label=metadata_label,
+            metadata_text=metadata_text,
         )
     except Exception as e:
         log.warning("index_failed document_id=%s err=%s", document_id, e)
