@@ -83,7 +83,7 @@ You only see documents in **collections your account can access** (see [Workspac
 **`GET /api/v1/documents/{document_id}`**  
 `document_id` is a UUID.
 
-**Response (JSON):** same fields as list items, plus **`user_metadata`** (client JSON from intake), **`sources`** — provenance rows (e.g. **`upload`**, **`url`**) with locators, MIME types, and byte lengths when known, **`body_text`** when extract has run, and optional **`canonical_score`** (latest **`document_scores`** row with **`is_canonical=true`**, e.g. pipeline heuristic).
+**Response (JSON):** same fields as list items, plus **`user_metadata`** (client JSON from intake), **`sources`** — provenance rows (e.g. **`upload`**, **`url`**) with locators, MIME types, and byte lengths when known, **`body_text`** when extract has run, and optional **`canonical_score`** (the row with **`is_canonical=true`**: usually pipeline **`verifiedsignal_heuristic`**, or **`verifiedsignal_http`** if your deployment sets **`SCORE_API_PROMOTE_CANONICAL=true`** after a successful async score — see **[`../scoring-http.md`](../scoring-http.md)**).
 
 **`GET /api/v1/documents/{document_id}/pipeline`** — latest **`pipeline_runs`** row and **`pipeline_events`** for polling worker progress (same auth rules as the document GET).
 

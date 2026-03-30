@@ -124,6 +124,37 @@ class Settings(BaseSettings):
         validation_alias="ENQUEUE_SCORE_AFTER_PIPELINE",
     )
 
+    # Async `score_document` job: `stub` (placeholder row) or `http` (POST to SCORE_HTTP_URL).
+    score_async_backend: str = Field(default="stub", validation_alias="SCORE_ASYNC_BACKEND")
+    score_http_url: str = Field(default="", validation_alias="SCORE_HTTP_URL")
+    score_http_bearer_token: str = Field(default="", validation_alias="SCORE_HTTP_BEARER_TOKEN")
+    score_http_timeout_s: float = Field(default=120.0, validation_alias="SCORE_HTTP_TIMEOUT_S")
+    score_http_max_body_chars: int = Field(
+        default=12_000,
+        ge=256,
+        le=500_000,
+        validation_alias="SCORE_HTTP_MAX_BODY_CHARS",
+    )
+    score_http_scorer_version: str = Field(
+        default="1.0.0",
+        validation_alias="SCORE_HTTP_SCORER_VERSION",
+    )
+    # When true, successful HTTP scorer row becomes canonical (heuristic + others demoted).
+    score_api_promote_canonical: bool = Field(
+        default=False,
+        validation_alias="SCORE_API_PROMOTE_CANONICAL",
+    )
+
+    @field_validator("score_async_backend", mode="before")
+    @classmethod
+    def normalize_score_async_backend(cls, v: object) -> str:
+        if v is None or (isinstance(v, str) and not v.strip()):
+            return "stub"
+        s = str(v).strip().lower()
+        if s not in ("stub", "http"):
+            raise ValueError("SCORE_ASYNC_BACKEND must be 'stub' or 'http'")
+        return s
+
     # Must match worker `WorkerSettings.queue_name` / `VERIFIEDSIGNAL_ARQ_QUEUE`.
     arq_queue_name: str = Field(
         default="verifiedsignal:jobs",

@@ -6,6 +6,7 @@ import asyncio
 from typing import Any
 
 from app.services.url_ingest_worker import run_fetch_url_and_ingest_sync
+from arq.worker import func as arq_job
 
 from worker.logging import get_logger
 from worker.pipeline import run_document_pipeline
@@ -20,13 +21,28 @@ async def fetch_url_and_ingest(ctx: dict[str, Any], document_id: str) -> str:
     return document_id
 
 
-async def score_document(ctx: dict[str, Any], document_id: str) -> str:
-    """Stub scoring job: placeholder row in `document_scores` (real models TBD)."""
-    from app.services.score_document_worker import run_score_document_sync
+async def _score_document(ctx: dict[str, Any], document_id: str) -> str:
+    """
+    Scoring job: stub or HTTP remote scorer (`SCORE_ASYNC_BACKEND`, `SCORE_HTTP_URL`).
+
+    Transient remote failures raise after DB rollback so ARQ retries (see `max_tries`).
+    """
+    from app.services.score_document_worker import (
+        ScoringRetryableError,
+        run_score_document_sync,
+    )
 
     log.info("task_score_document document_id=%s", document_id)
-    await asyncio.to_thread(run_score_document_sync, document_id)
+    try:
+        await asyncio.to_thread(run_score_document_sync, document_id)
+    except ScoringRetryableError:
+        log.warning("task_score_document_retryable document_id=%s", document_id)
+        raise
     return document_id
+
+
+# Registered as `score_document` for enqueue_job; retries transient HTTP/network failures.
+score_document = arq_job(_score_document, name="score_document", max_tries=5)
 
 
 async def process_document(ctx: dict[str, Any], document_id: str) -> str:

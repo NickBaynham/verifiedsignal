@@ -21,7 +21,7 @@ Set **`VITE_API_URL`** to your FastAPI origin (no trailing slash), e.g. `http://
 | Session | `POST /auth/login`, `POST /auth/refresh`, `POST /auth/logout` |
 | Profile | `GET /api/v1/users/me` |
 | Dashboard | `GET /api/v1/documents`, `GET /api/v1/collections`, `GET /api/v1/events/stream` (SSE) |
-| Document reader | `GET /api/v1/documents/{id}` (includes `canonical_score` when present) |
+| Document reader | `GET /api/v1/documents/{id}` (`canonical_score` when present — pipeline heuristic and/or promoted HTTP scorer; see `docs/scoring-http.md`) |
 | Upload | `POST /api/v1/documents` (multipart), `POST /api/v1/documents/from-url`, poll `GET /api/v1/documents/{id}/pipeline` |
 | Search | `GET /api/v1/search` |
 | Collections | `GET /api/v1/collections`, `GET /api/v1/collections/{id}/analytics` |
