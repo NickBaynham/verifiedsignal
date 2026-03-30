@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import uuid
+
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_db
 from app.auth.dependencies import get_current_user
-from app.schemas.collection import CollectionListResponse, CollectionOut
+from app.schemas.collection import CollectionAnalyticsOut, CollectionListResponse, CollectionOut
+from app.services.collection_analytics_service import get_collection_analytics
 from app.services.collection_service import list_collections_for_user
 
 router = APIRouter(prefix="/collections", tags=["collections"])
@@ -39,3 +42,15 @@ def list_collections(
             for c, n in rows
         ],
     )
+
+
+@router.get("/{collection_id}/analytics", response_model=CollectionAnalyticsOut)
+async def collection_analytics(
+    collection_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    user_id: str = Depends(get_current_user),
+) -> CollectionAnalyticsOut:
+    """
+    Facet counts from the search index plus Postgres rollups on canonical `document_scores`.
+    """
+    return await get_collection_analytics(db, auth_sub=user_id, collection_id=collection_id)

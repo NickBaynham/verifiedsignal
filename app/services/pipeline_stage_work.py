@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from app.core.config import Settings, get_settings
 from app.db.models import Document
 from app.repositories import pipeline_repository as pipe_repo
+from app.services.heuristic_score import write_heuristic_canonical_score
 from app.services.queue_service import enqueue_score_document_sync
 from app.services.storage_service import ObjectStorage, get_object_storage
 
@@ -85,8 +86,11 @@ def enrich_stage(
     step_index: int,
     job_id: str,
 ) -> None:
-    if session.get(Document, document_id) is None:
+    doc = session.get(Document, document_id)
+    if doc is None:
         return
+    body = doc.body_text or ""
+    word_count = len(body.split())
     pipe_repo.append_event(
         session,
         run_id,
@@ -95,8 +99,10 @@ def enrich_stage(
         "enrich",
         {
             "job_id": job_id,
-            "mode": "noop",
-            "detail": "no_enrichers_configured",
+            "mode": "text_stats",
+            "word_count": word_count,
+            "char_count": len(body),
+            "has_body_text": bool(body.strip()),
         },
     )
 
@@ -111,6 +117,15 @@ def score_enqueue_stage(
     settings: Settings | None = None,
 ) -> None:
     settings = settings or get_settings()
+    doc = session.get(Document, document_id)
+    if doc is not None:
+        write_heuristic_canonical_score(
+            session,
+            document_id=document_id,
+            pipeline_run_id=run_id,
+            body_text=doc.body_text,
+        )
+
     if not settings.enqueue_score_after_pipeline:
         pipe_repo.append_event(
             session,

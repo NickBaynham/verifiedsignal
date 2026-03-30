@@ -14,7 +14,7 @@ Refresh cookie name: `vs_refresh_token` (path `/auth`).
 
 ## Frontend (`apps/web/`)
 
-Scaffold with Vite + React + TypeScript; keep access tokens **in memory only**; call FastAPI for session operations. After login you can call **`POST /auth/sync-identity`** or rely on the first protected API request to provision Postgres. See `apps/web/README.md` and `supabase/README.md`.
+Vite + React + TypeScript SPA: call FastAPI for **login / refresh / logout** with `credentials: 'include'`. The app stores the access token in memory and **`sessionStorage`** (key `verifiedsignal_api_access_token`) so reloads work when the refresh cookie is missing in local dev; see **`apps/web/README.md`**. After login you can call **`POST /auth/sync-identity`** or rely on the first protected API request to provision Postgres. See also `supabase/README.md`.
 
 **End-user guide:** **[`end-user/README.md`](end-user/README.md)** (accounts/collections summary: [`accounts-and-collections.md`](accounts-and-collections.md)).
 

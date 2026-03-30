@@ -1,27 +1,52 @@
 # VerifiedSignal Web (React + Vite)
 
-## UI demo (mock data)
+## Modes
 
-This app ships a **clickable product demo** aligned with the [VerifiedSignal use case spec](https://docs.google.com/document/d/1VpqZqnLtpwi7g64vcXpUSYbyYX8bn84clidrQ-NjtLc/edit) (login, dashboard, upload + pipeline, document reader, collection analytics, search, reports, billing, security). **All domain data is mocked** under `src/demo/` so you can show stakeholders the intended UX before FastAPI endpoints are complete.
+### Demo mode (default)
 
-- Run locally: `npm install` then `npm run dev` (default [http://127.0.0.1:5173](http://127.0.0.1:5173)).
-- Sign in with **any password ≥ 3 characters** (demo only; no network call).
-- Replace mock modules with `fetch`/`EventSource` calls to `import.meta.env.VITE_API_URL` when wiring the backend.
+If **`VITE_API_URL`** is unset or empty, the app uses **mock data** under `src/demo/` and **client-only login** (password ≥ 3 characters, no network). Use this for stakeholder UX reviews without running the API.
 
-## Production auth (later)
+### API mode
 
-The SPA should use **Supabase JS** only where the auth spec requires it (e.g. password reset from emailed link); **login, signup, logout, and refresh** should call the FastAPI API (`VITE_API_URL`) so the refresh token stays **httpOnly** on the API origin. See [`docs/auth-supabase.md`](../../docs/auth-supabase.md) at the repo root.
+Set **`VITE_API_URL`** to your FastAPI origin (no trailing slash), e.g. `http://127.0.0.1:8000` in `.env.local`.
 
-After you receive an access token, either call **`POST /auth/sync-identity`** with `Authorization: Bearer …` or hit any protected API route: the backend can **create your Postgres user, personal org, and Inbox** automatically. Read **[`docs/end-user/README.md`](../../docs/end-user/README.md)** for the full user-facing API guide.
+- **Auth:** `POST /auth/login` with JSON `{ "email", "password" }`, `credentials: 'include'` so the API can set the httpOnly refresh cookie on `/auth`. The access token is kept in memory and also stored in **`sessionStorage`** under `verifiedsignal_api_access_token` so full page reloads and deep links keep working when the refresh cookie is absent (common in local dev). It is removed on **Sign out**. Prefer relying on the refresh cookie in production and treat sessionStorage as a dev convenience; it is XSS-sensitive if third-party scripts run on the same origin.
+- **CORS:** the API must list this SPA’s origin in **`CORS_ORIGINS`** (see root `docs/auth-supabase.md`).
+- **Supabase:** `/auth/login` returns **503** if Supabase env vars are missing on the API — configure the backend per `docs/auth-supabase.md`.
+
+**Wired endpoints (UI):**
+
+| Area | Endpoints |
+|------|-----------|
+| Session | `POST /auth/login`, `POST /auth/refresh`, `POST /auth/logout` |
+| Profile | `GET /api/v1/users/me` |
+| Dashboard | `GET /api/v1/documents`, `GET /api/v1/collections`, `GET /api/v1/events/stream` (SSE) |
+| Document reader | `GET /api/v1/documents/{id}` (includes `canonical_score` when present) |
+| Upload | `POST /api/v1/documents` (multipart), `POST /api/v1/documents/from-url`, poll `GET /api/v1/documents/{id}/pipeline` |
+| Search | `GET /api/v1/search` |
+| Collections | `GET /api/v1/collections`, `GET /api/v1/collections/{id}/analytics` |
+
+**Still mock / placeholder:** Reports, Billing, Security pages; demo-style histogram/trend **charts** on the analytics page (API mode adds real facet tables + Postgres KPIs). Search “mode” toggles (keyword / semantic / hybrid) are UI-only until the API supports them.
 
 ## Setup
 
 ```bash
 cd apps/web
 npm install
-cp .env.example .env.local   # optional; VITE_* for future API wiring
+cp .env.example .env.local   # optional
 npm run dev
 ```
+
+## Tests
+
+```bash
+npm run test:unit              # Vitest (API URL helpers, etc.)
+npm run test:e2e               # Playwright — demo mode (no VITE_API_URL)
+npm run test:e2e:api-mock      # Playwright — API mode with in-browser HTTP mocks
+npm run test:e2e:ui            # Playwright UI mode
+```
+
+API-mode E2E starts Vite with `VITE_API_URL=http://127.0.0.1:17654` (nothing listens there); `e2e/helpers/apiMockRoutes.ts` fulfills requests so CI does not need Postgres or Supabase.
 
 ## Build
 
@@ -29,3 +54,7 @@ npm run dev
 npm run build
 npm run preview   # serve dist
 ```
+
+## Production auth notes
+
+Use **Supabase** only where the auth spec requires it (e.g. password reset from an emailed link). **Login, signup, logout, refresh** should go through FastAPI so the refresh token stays **httpOnly** on the API origin. See [`docs/auth-supabase.md`](../../docs/auth-supabase.md) and [`docs/end-user/README.md`](../../docs/end-user/README.md).

@@ -6,11 +6,14 @@ import uuid
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Response, UploadFile
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_db, get_object_storage_dep
 from app.auth.dependencies import get_current_user
+from app.db.models import DocumentScore
 from app.schemas.document import (
+    CanonicalScoreOut,
     DocumentDetailOut,
     DocumentListResponse,
     DocumentSourceOut,
@@ -19,6 +22,7 @@ from app.schemas.document import (
     UrlIntakeRequest,
     UrlIntakeResponse,
 )
+from app.schemas.pipeline import DocumentPipelineOut
 from app.services.document_service import (
     delete_document_for_user,
     get_document_for_user,
@@ -27,6 +31,7 @@ from app.services.document_service import (
     run_url_intake_submit,
 )
 from app.services.exceptions import IntakeValidationError, StorageUploadError
+from app.services.pipeline_status_service import get_document_pipeline_for_user
 from app.services.storage_service import ObjectStorage
 from app.services.user_metadata import parse_metadata_json_string, validate_user_metadata
 
@@ -77,6 +82,19 @@ def ingest_document_from_url(
     return UrlIntakeResponse(**payload)
 
 
+@router.get("/{document_id}/pipeline", response_model=DocumentPipelineOut)
+def get_document_pipeline(
+    document_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    user_id: str = Depends(get_current_user),
+) -> DocumentPipelineOut:
+    """Latest pipeline run and events for polling + UI progress (worker writes to Postgres)."""
+    out = get_document_pipeline_for_user(db, document_id=document_id, auth_sub=user_id)
+    if out is None:
+        raise HTTPException(status_code=404, detail="Document not found")
+    return out
+
+
 @router.get("/{document_id}", response_model=DocumentDetailOut)
 def get_document(
     document_id: uuid.UUID,
@@ -89,10 +107,37 @@ def get_document(
         raise HTTPException(status_code=404, detail="Document not found")
     doc, sources = out
     base = DocumentSummaryOut.model_validate(doc)
+    score_row = db.scalar(
+        select(DocumentScore)
+        .where(
+            DocumentScore.document_id == doc.id,
+            DocumentScore.is_canonical.is_(True),
+        )
+        .limit(1)
+    )
+    canon: CanonicalScoreOut | None = None
+    if score_row is not None:
+        canon = CanonicalScoreOut(
+            factuality_score=float(score_row.factuality_score)
+            if score_row.factuality_score is not None
+            else None,
+            ai_generation_probability=float(score_row.ai_generation_probability)
+            if score_row.ai_generation_probability is not None
+            else None,
+            fallacy_score=float(score_row.fallacy_score)
+            if score_row.fallacy_score is not None
+            else None,
+            confidence_score=float(score_row.confidence_score)
+            if score_row.confidence_score is not None
+            else None,
+            scorer_name=score_row.scorer_name,
+            scorer_version=score_row.scorer_version,
+        )
     return DocumentDetailOut(
         **base.model_dump(),
         sources=[DocumentSourceOut.model_validate(s) for s in sources],
         body_text=doc.body_text,
+        canonical_score=canon,
     )
 
 

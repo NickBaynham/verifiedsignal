@@ -5,6 +5,7 @@ from __future__ import annotations
 import uuid
 from datetime import UTC, datetime
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.db.models import Document, PipelineEvent, PipelineRun
@@ -63,3 +64,21 @@ def fail_run(session: Session, run: PipelineRun, message: str) -> None:
     run.status = "failed"
     run.error_detail = {"message": message[:4000]}
     run.completed_at = datetime.now(UTC)
+
+
+def get_latest_run_for_document(session: Session, document_id: uuid.UUID) -> PipelineRun | None:
+    return session.scalar(
+        select(PipelineRun)
+        .where(PipelineRun.document_id == document_id)
+        .order_by(PipelineRun.started_at.desc().nullslast(), PipelineRun.created_at.desc())
+        .limit(1)
+    )
+
+
+def list_events_for_run(session: Session, run_id: uuid.UUID) -> list[PipelineEvent]:
+    rows = session.scalars(
+        select(PipelineEvent)
+        .where(PipelineEvent.pipeline_run_id == run_id)
+        .order_by(PipelineEvent.step_index.asc(), PipelineEvent.created_at.asc())
+    ).all()
+    return list(rows)

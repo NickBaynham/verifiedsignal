@@ -94,11 +94,24 @@ class DocumentSummaryOut(BaseModel):
     updated_at: datetime
 
 
+class CanonicalScoreOut(BaseModel):
+    factuality_score: float | None = None
+    ai_generation_probability: float | None = None
+    fallacy_score: float | None = None
+    confidence_score: float | None = None
+    scorer_name: str | None = None
+    scorer_version: str | None = None
+
+
 class DocumentDetailOut(DocumentSummaryOut):
     sources: list[DocumentSourceOut] = Field(default_factory=list)
     body_text: str | None = Field(
         default=None,
         description="Plain text extracted for search (omitted in list responses).",
+    )
+    canonical_score: CanonicalScoreOut | None = Field(
+        default=None,
+        description="Latest canonical row from document_scores when present.",
     )
 
 

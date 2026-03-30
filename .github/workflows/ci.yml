@@ -73,3 +73,26 @@ jobs:
 
       - name: Tests
         run: pdm run python -m pytest -v --tb=short
+
+  web:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/web
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+
+      - name: Install and test web
+        run: |
+          npm ci
+          npx playwright install chromium
+          npm run build
+          npm run test:unit
+          npm run test:e2e
+          npm run test:e2e:api-mock

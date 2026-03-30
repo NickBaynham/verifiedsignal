@@ -8,8 +8,8 @@ Defined in **`app/pipeline/constants.py`** as **`DOCUMENT_SCAFFOLD_STAGES`**:
 
 1. **`ingest`** — Verifies the raw object exists in storage (`object_exists` on **`documents.storage_key`**) without downloading the full body. Emits **`ingest_verified`**, **`ingest_skipped`**, or **`ingest_failed`**.
 2. **`extract`** — **`get_bytes`** from storage, then **`extract_document_text`** (`app/services/document_content_extract.py`): **PDF** (`pypdf`), **DOCX** (`python-docx`), or the existing **plain / UTF-8 heuristic** path (`document_text_extract`). Truncated text is stored in **`documents.body_text`**; full extracted UTF-8 text is uploaded to **`artifacts/{document_id}/extracted.txt`** and **`documents.extract_artifact_key`** is set (migration **004**). Events: **`extract_complete`**, **`extract_failed`**, **`extract_skipped`**, **`extract_artifact_failed`** (upload error only).
-3. **`enrich`** — Placeholder; emits **`enrich_complete`** with **`mode: noop`** until real enrichers exist.
-4. **`score`** — If **`ENQUEUE_SCORE_AFTER_PIPELINE=true`**, enqueues **`score_document`** on Redis/ARQ (or records on the in-memory fake queue). Emits **`score_job_enqueued`**, **`score_skipped`**, or **`score_enqueue_failed`**. The **`score_document`** worker (`app/services/score_document_worker.py`) inserts a stub row into **`document_scores`** (`scorer_name`: **`verifiedsignal_stub`**) for wiring tests; replace with real scoring later.
+3. **`enrich`** — Lightweight **text stats** on **`documents.body_text`**: word/character counts and **`has_body_text`** in the **`enrich_complete`** payload (`mode`: **`text_stats`**). Swap in real enrichers (NER, embeddings, etc.) behind the same stage name when ready.
+4. **`score`** — Always writes a **canonical** heuristic row via **`verifiedsignal_heuristic`** (`app/services/heuristic_score.py`): **`factuality_score`** and **`ai_generation_probability`** are deterministic proxies from lexical diversity (not ML). If **`ENQUEUE_SCORE_AFTER_PIPELINE=true`**, also enqueues **`score_document`** on Redis/ARQ. Emits **`score_job_enqueued`**, **`score_skipped`**, or **`score_enqueue_failed`**. The **`score_document`** worker (`app/services/score_document_worker.py`) still inserts a **non-canonical** stub row (**`verifiedsignal_stub`**) for async wiring tests.
 5. **`index`** — Keyword index via **`index_document_sync`** (OpenSearch or fake). Events: **`index_complete`** / **`index_failed`**.
 6. **`finalize`** — Stage marker only; run is completed and **`documents.status`** set to **`completed`**.
 
@@ -33,5 +33,5 @@ Defined in **`app/pipeline/constants.py`** as **`DOCUMENT_SCAFFOLD_STAGES`**:
 
 ## Tests
 
-- **Unit:** `tests/unit/test_document_content_extract.py` (routing + extract), `tests/unit/test_intake_storage.py` (artifact key / `object_exists`), `tests/unit/test_queue_score_enqueue.py`.
+- **Unit:** `tests/unit/test_document_content_extract.py` (routing + extract), `tests/unit/test_intake_storage.py` (artifact key / `object_exists`), `tests/unit/test_queue_score_enqueue.py`, `tests/unit/test_heuristic_score.py`, `tests/unit/test_facet_aggregation_sync.py`.
 - **Integration:** `tests/integration/test_collections_and_pipeline.py` — plain text, **PDF** and **DOCX** intake → **`execute_scaffold_pipeline`** → **`body_text`**, **`extract_artifact_key`**, and in-memory storage artifact bytes; optional score enqueue and stub **`document_scores`** row.

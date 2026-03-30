@@ -260,6 +260,30 @@ def search_documents_sync(
     }
 
 
+def facet_aggregation_sync(
+    *,
+    filters: SearchFilters,
+    settings: Settings | None = None,
+) -> dict[str, Any]:
+    """
+    OpenSearch (or fake) facet buckets for filtered documents; uses minimal `size` for hits.
+    """
+    settings = settings or get_settings()
+    out = search_documents_sync(
+        "",
+        limit=1,
+        filters=filters,
+        include_facets=True,
+        settings=settings,
+    )
+    return {
+        "total": out["total"],
+        "index_status": out["index_status"],
+        "message": out.get("message"),
+        "facets": out.get("facets"),
+    }
+
+
 def search_keyword_sync(
     query: str,
     *,

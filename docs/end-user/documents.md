@@ -83,7 +83,9 @@ You only see documents in **collections your account can access** (see [Workspac
 **`GET /api/v1/documents/{document_id}`**  
 `document_id` is a UUID.
 
-**Response (JSON):** same fields as list items, plus **`user_metadata`** (client JSON from intake), **`sources`** — provenance rows (e.g. **`upload`**, **`url`**) with locators, MIME types, and byte lengths when known, and **`body_text`** when extract has run.
+**Response (JSON):** same fields as list items, plus **`user_metadata`** (client JSON from intake), **`sources`** — provenance rows (e.g. **`upload`**, **`url`**) with locators, MIME types, and byte lengths when known, **`body_text`** when extract has run, and optional **`canonical_score`** (latest **`document_scores`** row with **`is_canonical=true`**, e.g. pipeline heuristic).
+
+**`GET /api/v1/documents/{document_id}/pipeline`** — latest **`pipeline_runs`** row and **`pipeline_events`** for polling worker progress (same auth rules as the document GET).
 
 **404** means the id does not exist **or** you do not have access.
 

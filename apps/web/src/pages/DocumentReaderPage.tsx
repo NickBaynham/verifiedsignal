@@ -1,5 +1,10 @@
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Link, useParams } from "react-router-dom";
+import { getDocument } from "../api/documents";
+import type { DocumentDetail } from "../api/types";
+import { ApiError } from "../api/http";
+import { useAuth } from "../context/AuthContext";
+import { isApiBackend } from "../config";
 import { getDocumentById } from "../demo";
 import { ScoreBar } from "../components/ScoreBar";
 
@@ -31,6 +36,144 @@ function highlightTermInText(text: string, term: string): ReactNode {
 
 export function DocumentReaderPage() {
   const { id } = useParams();
+  const { accessToken } = useAuth();
+  const api = isApiBackend();
+  const [apiDoc, setApiDoc] = useState<DocumentDetail | null>(null);
+  const [apiErr, setApiErr] = useState<string | null>(null);
+  const [apiLoading, setApiLoading] = useState(false);
+
+  useEffect(() => {
+    if (!api || !accessToken || !id) {
+      setApiDoc(null);
+      setApiErr(null);
+      setApiLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setApiLoading(true);
+    setApiErr(null);
+    setApiDoc(null);
+    void (async () => {
+      try {
+        const d = await getDocument(accessToken, id);
+        if (!cancelled) setApiDoc(d);
+      } catch (e) {
+        if (!cancelled) {
+          if (e instanceof ApiError && e.status === 404) setApiErr("notfound");
+          else setApiErr(e instanceof ApiError ? e.message : "Failed to load document");
+        }
+      } finally {
+        if (!cancelled) setApiLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [api, accessToken, id]);
+
+  if (api) {
+    if (!id) {
+      return (
+        <>
+          <h1 className="page-title">Document not found</h1>
+          <p className="page-sub">
+            <Link to="/dashboard">Back to dashboard</Link>
+          </p>
+        </>
+      );
+    }
+    if (apiLoading) {
+      return <p className="page-sub">Loading document…</p>;
+    }
+    if (apiErr === "notfound") {
+      return (
+        <>
+          <h1 className="page-title">Document not found</h1>
+          <p className="page-sub">
+            Unknown id or no access. <Link to="/dashboard">Back to dashboard</Link>
+          </p>
+        </>
+      );
+    }
+    if (apiErr) {
+      return (
+        <>
+          <h1 className="page-title">Error</h1>
+          <p className="error-text">{apiErr}</p>
+          <p className="page-sub">
+            <Link to="/dashboard">Back to dashboard</Link>
+          </p>
+        </>
+      );
+    }
+    if (!apiDoc) return null;
+
+    return (
+      <>
+        <div style={{ marginBottom: "1rem" }}>
+          <Link to="/dashboard" style={{ fontSize: "0.9rem" }}>
+            ← Library
+          </Link>
+        </div>
+        <h1 className="page-title">{apiDoc.title || apiDoc.original_filename || apiDoc.id}</h1>
+        <p className="page-sub">
+          <strong>API document</strong> — Status <code>{apiDoc.status}</code>
+          {apiDoc.content_type ? (
+            <>
+              {" "}
+              · <code>{apiDoc.content_type}</code>
+            </>
+          ) : null}
+          . Canonical scores come from <code>document_scores</code> (pipeline heuristic until ML models ship). Segment-level
+          highlights remain demo-only.
+        </p>
+        {apiDoc.canonical_score &&
+        (apiDoc.canonical_score.factuality_score != null ||
+          apiDoc.canonical_score.ai_generation_probability != null) ? (
+          <div className="card" style={{ marginBottom: "1rem" }}>
+            <h2 style={{ margin: "0 0 0.75rem", fontSize: "1rem" }}>Scores</h2>
+            <p style={{ fontSize: "0.8rem", color: "var(--text-muted)", marginTop: 0 }}>
+              {apiDoc.canonical_score.scorer_name} {apiDoc.canonical_score.scorer_version}
+            </p>
+            {apiDoc.canonical_score.factuality_score != null ? (
+              <div style={{ marginBottom: "0.75rem" }}>
+                <ScoreBar value={apiDoc.canonical_score.factuality_score} label="Factuality (heuristic)" />
+              </div>
+            ) : null}
+            {apiDoc.canonical_score.ai_generation_probability != null ? (
+              <ScoreBar value={apiDoc.canonical_score.ai_generation_probability} label="AI-style proxy (heuristic)" />
+            ) : null}
+          </div>
+        ) : null}
+        <div className="card">
+          <pre
+            style={{
+              margin: 0,
+              whiteSpace: "pre-wrap",
+              fontFamily: "var(--font-sans, system-ui, sans-serif)",
+              fontSize: "0.95rem",
+              lineHeight: 1.5,
+            }}
+          >
+            {apiDoc.body_text || "(No extracted text yet — pipeline may still be running.)"}
+          </pre>
+        </div>
+        {apiDoc.sources.length ? (
+          <div className="card" style={{ marginTop: "1rem" }}>
+            <h2 style={{ margin: "0 0 0.5rem", fontSize: "1rem" }}>Sources</h2>
+            <ul style={{ margin: 0, paddingLeft: "1.25rem" }}>
+              {apiDoc.sources.map((s) => (
+                <li key={s.id} style={{ fontSize: "0.9rem" }}>
+                  <code>{s.source_kind}</code> — {s.locator}
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
+      </>
+    );
+  }
+
   const doc = id ? getDocumentById(id) : undefined;
   const [panelTab, setPanelTab] = useState<"scores" | "keywords">("scores");
   const [focusMode, setFocusMode] = useState(false);
@@ -82,12 +225,8 @@ export function DocumentReaderPage() {
           <span style={{ fontSize: "0.9rem" }}>
             Thresholds exceeded (spec): high AI probability and/or low factuality. Review highlighted passages.
           </span>
-          {aiScore ? (
-            <span className="pill pill-danger">AI {Math.round(aiScore.value * 100)}%</span>
-          ) : null}
-          {factScore ? (
-            <span className="pill pill-warn">Factuality {Math.round(factScore.value * 100)}%</span>
-          ) : null}
+          {aiScore ? <span className="pill pill-danger">AI {Math.round(aiScore.value * 100)}%</span> : null}
+          {factScore ? <span className="pill pill-warn">Factuality {Math.round(factScore.value * 100)}%</span> : null}
         </div>
       ) : null}
 
@@ -102,9 +241,7 @@ export function DocumentReaderPage() {
           <div className={`reader-doc ${focusMode ? "focus-mode" : ""}`}>
             {doc.bodySegments.map((seg, i) => {
               const content =
-                selectedKeyword && !seg.highlight
-                  ? highlightTermInText(seg.text, selectedKeyword)
-                  : seg.text;
+                selectedKeyword && !seg.highlight ? highlightTermInText(seg.text, selectedKeyword) : seg.text;
               return seg.highlight ? (
                 <span key={i} className="hl" title={`${seg.highlight.fallacyType}: ${seg.highlight.explanation}`}>
                   {seg.text}

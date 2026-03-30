@@ -1,5 +1,6 @@
 import { NavLink, Outlet } from "react-router-dom";
-import { useDemoAuth } from "../context/DemoAuthContext";
+import { useAuth } from "../context/AuthContext";
+import { getApiBaseUrl, isApiBackend } from "../config";
 
 const nav = [
   { to: "/dashboard", label: "Dashboard" },
@@ -12,7 +13,8 @@ const nav = [
 ];
 
 export function AppLayout() {
-  const { user, logout } = useDemoAuth();
+  const { user, logout } = useAuth();
+  const api = isApiBackend();
 
   return (
     <div className="layout-root">
@@ -29,16 +31,25 @@ export function AppLayout() {
         </nav>
         <div className="sidebar-footer">
           <div style={{ marginBottom: 8 }}>{user?.email}</div>
-          <button type="button" className="btn btn-ghost" style={{ padding: "0.35rem 0" }} onClick={logout}>
+          <button type="button" className="btn btn-ghost" style={{ padding: "0.35rem 0" }} onClick={() => void logout()}>
             Sign out
           </button>
         </div>
       </aside>
       <div className="main-wrap">
         <div className="demo-banner">
-          <strong>UI demo</strong> — Data is mocked for stakeholder review. Wire to{" "}
-          <code style={{ fontFamily: "var(--font-mono)" }}>VITE_API_URL</code> when backend endpoints are ready
-          (see use case spec API section).
+          {api ? (
+            <>
+              <strong>API mode</strong> — Data loads from <code style={{ fontFamily: "var(--font-mono)" }}>{getApiBaseUrl()}</code>
+              . Reports, billing, and security remain UI placeholders until those endpoints exist.
+            </>
+          ) : (
+            <>
+              <strong>UI demo</strong> — Data is mocked for stakeholder review. Set{" "}
+              <code style={{ fontFamily: "var(--font-mono)" }}>VITE_API_URL</code> to use the FastAPI backend (
+              <code>/api/v1/*</code>, <code>/auth/*</code>).
+            </>
+          )}
         </div>
         <div className="main-inner">
           <Outlet />

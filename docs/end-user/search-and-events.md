@@ -82,7 +82,7 @@ Events are broadcast **in memory** on a single API instance. Multi-server deploy
 ### Using SSE in the browser
 
 ```javascript
-const es = new EventSource(`${API_BASE}/api/v1/events/stream`);
+const es = new EventSource(`${API_BASE}/api/v1/events/stream`, { withCredentials: true });
 es.onmessage = (ev) => {
   const msg = JSON.parse(ev.data);
   console.log(msg.type, msg.payload);
@@ -90,6 +90,21 @@ es.onmessage = (ev) => {
 ```
 
 Handle **`onerror`** to reconnect with backoff if the network drops.
+
+**Cross-origin SPAs:** the stream must be on the same **`VITE_API_URL`** origin you call for JSON APIs, or the browser will block **`EventSource`**. The React app under **`apps/web`** subscribes here and filters events such as **`document_queued`**.
+
+### Pipeline polling (worker progress)
+
+The worker runs in a **separate process** from the API, so stage transitions are persisted in **`pipeline_runs`** / **`pipeline_events`** rather than only in the in-memory SSE hub.
+
+- **`GET /api/v1/documents/{document_id}/pipeline`** — latest run plus ordered events for the document (requires Bearer JWT and document visibility). Use short-interval polling from the Upload/Dashboard UI until **`document_status`** is **`completed`** or **`failed`**.
+
+## Collection analytics
+
+**`GET /api/v1/collections/{collection_id}/analytics`** (Bearer required, collection must be accessible):
+
+- **`facets`** — bucket counts from the search index (**`ingest_source`**, **`status`**, **`content_type`**, **`tags`**) for documents in that collection (same filter stack as search).
+- **`postgres`** — rollups over **canonical** **`document_scores`**: averages, **`scored_documents`**, and a simple **suspicious** count (high AI proxy or low factuality heuristic).
 
 ## Next steps
 
