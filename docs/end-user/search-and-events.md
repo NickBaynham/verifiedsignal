@@ -8,7 +8,7 @@
 |-----------|-------------|
 | **`q`** | Search text (optional; up to 2000 characters). Empty **`q`** runs a **match-all** query (still subject to filters and **`limit`**). |
 | **`limit`** | Hits to return (1–100, default 10). |
-| **`collection_id`** | Optional UUID. **When you send a valid Bearer token**, narrows results to that collection; must be one you can access (**403** if not). Ignored when unauthenticated (callers without a token cannot scope by arbitrary collections). |
+| **`collection_id`** | Optional UUID. Must be a collection you can access (**403** if not). |
 | **`content_type`** | Exact match on indexed MIME type (e.g. `text/plain`, `application/pdf`). |
 | **`status`** | Exact match on document pipeline status (e.g. `completed`, `queued`). |
 | **`ingest_source`** | `upload` or `url` — how the document entered the system (derived from **`document_sources`**). |
@@ -17,8 +17,8 @@
 
 ### Auth and visibility
 
-- **No `Authorization` header:** search behaves like early phases — **no collection ACL** is applied (same global index visibility as before). Do not expose unauthenticated search to confidential corpora.
-- **Valid Bearer JWT:** results are limited to documents in **collections your account can access**. Optional **`collection_id`** further narrows within that set.
+- **Default (`VERIFIEDSIGNAL_REQUIRE_AUTH_SEARCH=true`):** **`Authorization: Bearer <access_token>`** is **required**. Without it, the API returns **401**. Results are limited to documents in **collections your account can access**. Optional **`collection_id`** further narrows within that set.
+- **Legacy / local demos:** operators may set **`VERIFIEDSIGNAL_REQUIRE_AUTH_SEARCH=false`**. Then calls **without** a Bearer token skip collection filtering (global index visibility). **Do not use in production** for confidential corpora.
 
 Invalid or expired Bearer tokens receive **401**.
 
@@ -66,14 +66,26 @@ Invalid or expired Bearer tokens receive **401**.
 
 Returns a **text/event-stream** (SSE) connection. Your client should use **`EventSource`** (browser) or an SSE-capable HTTP client.
 
-**Auth today:** like search, this route uses a **placeholder** optional principal—connections are not yet restricted per user in code you ship today. **Do not rely on this for confidential data** until your deployment adds real auth on the stream.
+### Authentication
+
+- **Default (`VERIFIEDSIGNAL_REQUIRE_AUTH_SSE=true`):** you must prove identity with either:
+  - **`Authorization: Bearer <access_token>`**, or
+  - **`?access_token=<JWT>`** on the URL (required for browser **`EventSource`**, which cannot set custom headers).
+
+Missing or invalid tokens → **401**.
+
+- **Legacy:** **`VERIFIEDSIGNAL_REQUIRE_AUTH_SSE=false`** allows anonymous connections (all in-process events; not suitable for multi-tenant production).
+
+### Tenancy
+
+When auth is enabled, the stream only delivers events whose **`payload.auth_sub`** matches the subscriber’s JWT **`sub`** (for example **`document_queued`** after your own upload). Other users’ events are not sent on your connection.
 
 ### What you will see
 
 1. First, a **`connected`** event (JSON with `type` and empty `payload`).
 2. Later, JSON lines with:
    - **`type`** — event name (for example **`document_queued`** after a successful file upload enqueue)
-   - **`payload`** — structured details (e.g. `document_id`, `job_id`, `storage_key`)
+   - **`payload`** — structured details (e.g. `document_id`, `job_id`, `storage_key`, `auth_sub`)
    - **`ts`** — UTC timestamp
    - **`environment`** — server environment label
 
@@ -82,7 +94,11 @@ Events are broadcast **in memory** on a single API instance. Multi-server deploy
 ### Using SSE in the browser
 
 ```javascript
-const es = new EventSource(`${API_BASE}/api/v1/events/stream`, { withCredentials: true });
+const token = "<access_token>";
+const es = new EventSource(
+  `${API_BASE}/api/v1/events/stream?access_token=${encodeURIComponent(token)}`,
+  { withCredentials: true },
+);
 es.onmessage = (ev) => {
   const msg = JSON.parse(ev.data);
   console.log(msg.type, msg.payload);
@@ -91,7 +107,9 @@ es.onmessage = (ev) => {
 
 Handle **`onerror`** to reconnect with backoff if the network drops.
 
-**Cross-origin SPAs:** the stream must be on the same **`VITE_API_URL`** origin you call for JSON APIs, or the browser will block **`EventSource`**. The React app under **`apps/web`** subscribes here and filters events such as **`document_queued`**.
+**Cross-origin SPAs:** the stream must be on the same **`VITE_API_URL`** origin you call for JSON APIs, or the browser will block **`EventSource`**. The React app under **`apps/web`** passes **`access_token`** as a query parameter when opening the stream.
+
+**Security note:** query parameters can appear in logs and Referer headers. Use **short-lived access tokens**, **HTTPS only**, and avoid leaking URLs.
 
 ### Pipeline polling (worker progress)
 

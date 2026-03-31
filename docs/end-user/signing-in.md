@@ -55,9 +55,10 @@ The API returns a generic success message. If the email exists, Supabase sends r
 
 ## After you have an access token
 
-1. Send **`Authorization: Bearer <access_token>`** on every protected **`/api/v1/...`** request.
-2. **First use:** the API can **create your Postgres user, personal organization, and Inbox** automatically (default). See [Workspace and collections](workspace-and-collections.md).
-3. Optional explicit step: **`POST /auth/sync-identity`** with the same Bearer header returns your database user id and collection ids—useful if the UI wants a clear “workspace ready” moment.
+1. Send **`Authorization: Bearer <access_token>`** on every protected **`/api/v1/...`** request (including **`GET /api/v1/search`** by default).
+2. **SSE:** browser **`EventSource`** cannot set the **`Authorization`** header—open **`GET /api/v1/events/stream?access_token=<JWT>`** instead (see [Search and live updates — Authentication](search-and-events.md#authentication)).
+3. **First use:** the API can **create your Postgres user, personal organization, and Inbox** automatically (default). See [Workspace and collections](workspace-and-collections.md).
+4. Optional explicit step: **`POST /auth/sync-identity`** with the same Bearer header returns your database user id and collection ids—useful if the UI wants a clear “workspace ready” moment.
 
 ## Common problems
 

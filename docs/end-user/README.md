@@ -15,11 +15,12 @@ This folder describes what you can do with the product **as it exists today**: H
 | [Signing in and tokens](signing-in.md) | Email signup/login, refresh cookie, access token, logout |
 | [Workspace and collections](workspace-and-collections.md) | Your org, Inbox, profile, choosing a collection |
 | [Documents](documents.md) | Upload files, add by URL, list, open details, delete, statuses |
-| [Search and live updates](search-and-events.md) | Keyword search (filters + facets), SSE, pipeline polling, collection analytics |
+| [Search and live updates](search-and-events.md) | Authenticated keyword search (filters + facets), authenticated SSE + tenant filtering, pipeline polling, collection analytics |
 | [Status and troubleshooting](status-and-troubleshooting.md) | Service health, common errors, who to ask |
 
 ## Related documentation
 
+- **Async HTTP scoring & `canonical_score` (operators):** [`../scoring-http.md`](../scoring-http.md)
 - **Planned metadata & tags (technical design):** [`../document-metadata-design.md`](../document-metadata-design.md)
 - **Operators / security / JWT details:** [`../auth-supabase.md`](../auth-supabase.md), [`../tenancy-postgres.md`](../tenancy-postgres.md)
 - **URL intake (technical + SSRF):** [`../url-ingest.md`](../url-ingest.md)

@@ -27,4 +27,17 @@ test.describe("Search (mock)", () => {
     await page.getByLabel("Query").fill("goverment policy");
     await expect(page.getByRole("button", { name: "government policy" })).toBeVisible();
   });
+
+  test("search filters by collection (demo metadata)", async ({ page }) => {
+    await page.getByLabel("Collection").selectOption({ label: "Legal & vendor" });
+    await page.getByLabel("Query").fill("questionnaire");
+    await expect(page.getByRole("link", { name: /Vendor security questionnaire/i })).toBeVisible();
+    await expect(page.getByRole("link", { name: /Policy brief/i })).not.toBeVisible();
+  });
+
+  test("include facet counts shows facet table", async ({ page }) => {
+    await page.getByRole("checkbox", { name: /Include facet counts/i }).check();
+    await expect(page.getByRole("heading", { name: "Facets" })).toBeVisible();
+    await expect(page.getByRole("cell", { name: "complete", exact: true })).toBeVisible();
+  });
 });

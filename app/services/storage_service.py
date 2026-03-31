@@ -65,6 +65,8 @@ class ObjectStorage(Protocol):
 
     def get_bytes(self, key: str) -> bytes: ...
 
+    def presigned_get_url(self, key: str, *, expires_seconds: int) -> str | None: ...
+
 
 class InMemoryObjectStorage:
     """Test / local dev without MinIO."""
@@ -97,6 +99,10 @@ class InMemoryObjectStorage:
         if key not in self.objects:
             raise KeyError(key)
         return self.objects[key]
+
+    def presigned_get_url(self, key: str, *, expires_seconds: int) -> str | None:
+        _ = expires_seconds
+        return None
 
 
 class S3ObjectStorage:
@@ -199,6 +205,16 @@ class S3ObjectStorage:
             raise StorageUploadError(f"get object failed: {e}") from e
         except BotoCoreError as e:
             raise StorageUploadError(str(e)) from e
+
+    def presigned_get_url(self, key: str, *, expires_seconds: int) -> str | None:
+        try:
+            return self._client.generate_presigned_url(
+                "get_object",
+                Params={"Bucket": self._bucket, "Key": key},
+                ExpiresIn=expires_seconds,
+            )
+        except (ClientError, BotoCoreError):
+            return None
 
 
 _storage_singleton: ObjectStorage | None = None

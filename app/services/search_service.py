@@ -67,10 +67,18 @@ async def search_documents(
     """
     Full-text on title, body, and flattened metadata text; bool filters on index fields.
 
-    With a valid Bearer token, results are restricted to collections the user may access.
-    Without a token, behavior is unchanged from early phases (no collection ACL on search).
+    When ``VERIFIEDSIGNAL_REQUIRE_AUTH_SEARCH`` is true (default), ``auth_sub`` must be set
+    (Bearer JWT). Results are restricted to collections the user may access.
+
+    When auth is disabled for search, missing token skips collection filtering (legacy dev only).
     """
     settings = get_settings()
+    if settings.require_auth_for_search and auth_sub is None:
+        raise HTTPException(
+            status_code=401,
+            detail="Search requires authentication",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
     filters = build_search_filters(
         db,
         auth_sub,

@@ -8,11 +8,14 @@ export interface VsEventMessage {
 }
 
 /**
- * Browser EventSource to `GET /api/v1/events/stream` (same origin policy: set `VITE_API_URL`).
- * Filters are applied in the callback. No `Authorization` header — use only for non-sensitive
- * dev signals or when the API is same-origin with cookie auth.
+ * Browser EventSource to `GET /api/v1/events/stream` (same origin: set `VITE_API_URL`).
+ * Pass `accessToken` so the API receives `?access_token=` (EventSource cannot set Authorization).
  */
-export function useApiEventSource(enabled: boolean, onEvent: (msg: VsEventMessage) => void) {
+export function useApiEventSource(
+  enabled: boolean,
+  onEvent: (msg: VsEventMessage) => void,
+  accessToken?: string | null,
+) {
   const cbRef = useRef(onEvent);
   cbRef.current = onEvent;
 
@@ -21,7 +24,10 @@ export function useApiEventSource(enabled: boolean, onEvent: (msg: VsEventMessag
     const root = getApiBaseUrl();
     if (!root) return;
 
-    const url = `${root}/api/v1/events/stream`;
+    const tok = accessToken?.trim();
+    const url = tok
+      ? `${root}/api/v1/events/stream?access_token=${encodeURIComponent(tok)}`
+      : `${root}/api/v1/events/stream`;
     const es = new EventSource(url, { withCredentials: true });
 
     es.onmessage = (e) => {
@@ -50,5 +56,5 @@ export function useApiEventSource(enabled: boolean, onEvent: (msg: VsEventMessag
     return () => {
       es.close();
     };
-  }, [enabled]);
+  }, [enabled, accessToken]);
 }

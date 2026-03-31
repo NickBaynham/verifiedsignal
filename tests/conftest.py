@@ -31,6 +31,16 @@ def api_client(monkeypatch):
     reset_fake_opensearch_index()
     reset_settings_cache()
     reset_object_storage()
+
+    def _stub_resolve_collections(_session, _auth_sub, settings):
+        dc = settings.default_collection_id
+        return [dc] if dc is not None else []
+
+    monkeypatch.setattr(
+        "app.services.search_service.resolve_accessible_collection_ids",
+        _stub_resolve_collections,
+    )
+
     monkeypatch.setattr(
         "app.api.routes.health.database_health_check",
         lambda: DatabaseHealthResult(
@@ -43,16 +53,32 @@ def api_client(monkeypatch):
         lambda _settings=None: ("up", None, None),
     )
 
-    from app.auth.dependencies import get_current_user
+    from app.auth.dependencies import (
+        get_current_user,
+        get_optional_current_user_sub,
+        get_sse_subscriber_sub,
+    )
     from fastapi.testclient import TestClient
 
+    _fixed_sub = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+
     async def _test_user_id() -> str:
-        return "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+        return _fixed_sub
+
+    async def _test_optional_sub() -> str | None:
+        return _fixed_sub
+
+    async def _test_sse_sub() -> str | None:
+        return _fixed_sub
 
     application = create_app()
     application.dependency_overrides[get_current_user] = _test_user_id
+    application.dependency_overrides[get_optional_current_user_sub] = _test_optional_sub
+    application.dependency_overrides[get_sse_subscriber_sub] = _test_sse_sub
     with TestClient(application) as client:
         yield client
+    application.dependency_overrides.pop(get_sse_subscriber_sub, None)
+    application.dependency_overrides.pop(get_optional_current_user_sub, None)
     application.dependency_overrides.pop(get_current_user, None)
 
     asyncio.run(close_job_queue())

@@ -1,4 +1,5 @@
-import { ApiError, apiFetch, readErrorMessage } from "./http";
+import { getApiBaseUrl } from "../config";
+import { ApiError, apiFetch, joinApiUrl, readErrorMessage } from "./http";
 import type { DocumentDetail, DocumentListResponse, IntakeResponse, UrlIntakeResponse } from "./types";
 
 export async function listDocuments(
@@ -62,4 +63,64 @@ export async function ingestDocumentFromUrl(
     throw new ApiError(await readErrorMessage(res), res.status);
   }
   return (await res.json()) as UrlIntakeResponse;
+}
+
+export async function deleteDocument(accessToken: string, documentId: string): Promise<void> {
+  const res = await apiFetch(`/api/v1/documents/${encodeURIComponent(documentId)}`, {
+    method: "DELETE",
+    accessToken,
+  });
+  if (res.status === 404) {
+    throw new ApiError("Document not found", 404);
+  }
+  if (!res.ok) {
+    throw new ApiError(await readErrorMessage(res), res.status);
+  }
+}
+
+/**
+ * Streams the original file through the API (`redirect=false`) so the Bearer token is sent.
+ * Triggers a browser download with the filename from Content-Disposition when present.
+ */
+export async function downloadOriginalFile(accessToken: string, documentId: string): Promise<void> {
+  const root = getApiBaseUrl();
+  if (!root) {
+    throw new ApiError("VITE_API_URL is not set", 0);
+  }
+  const path = `/api/v1/documents/${encodeURIComponent(documentId)}/file?redirect=false`;
+  const url = joinApiUrl(root, path);
+  const res = await fetch(url, {
+    method: "GET",
+    headers: { Authorization: `Bearer ${accessToken}` },
+    credentials: "include",
+  });
+  if (res.status === 404) {
+    throw new ApiError("Original file not available", 404);
+  }
+  if (!res.ok) {
+    throw new ApiError(await readErrorMessage(res), res.status);
+  }
+  const blob = await res.blob();
+  const cd = res.headers.get("Content-Disposition");
+  let filename = "download";
+  if (cd) {
+    const m = /filename\*=UTF-8''([^;]+)|filename="([^"]+)"/i.exec(cd);
+    const raw = m?.[1] || m?.[2];
+    if (raw) {
+      try {
+        filename = decodeURIComponent(raw);
+      } catch {
+        filename = raw;
+      }
+    }
+  }
+  const href = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = href;
+  a.download = filename;
+  a.rel = "noopener";
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(href);
 }

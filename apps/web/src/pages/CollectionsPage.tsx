@@ -37,8 +37,9 @@ export function CollectionsPage() {
       <>
         <h1 className="page-title">Collections</h1>
         <p className="page-sub">
-          From <code>GET /api/v1/collections</code>. Analytics charts for a collection are not yet backed by an API — the
-          analytics page shows live metadata only.
+          From <code>GET /api/v1/collections</code>. Each row links to{" "}
+          <code>GET /api/v1/collections/{"{id}"}/analytics</code> for OpenSearch facet buckets (when indexed) and Postgres
+          KPIs; placeholder charts remain on that page for UX.
         </p>
         {error ? <p className="error-text">{error}</p> : null}
         <div className="card">

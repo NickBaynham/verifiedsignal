@@ -344,6 +344,11 @@ export const DEMO_SEARCH_HITS: SearchHit[] = [
       [52, 95],
     ],
     scores: { factuality: 0.62, aiProbability: 0.81 },
+    collectionId: colResearch,
+    ingestSource: "upload",
+    contentType: "application/pdf",
+    status: "complete",
+    tags: ["policy", "pilot", "dataset"],
   },
   {
     documentId: "d1000000-0000-4000-8000-000000000002",
@@ -352,8 +357,34 @@ export const DEMO_SEARCH_HITS: SearchHit[] = [
       "…vendor states SOC 2 Type II is in progress… encryption is used for data in transit and at rest…",
     highlightRanges: [[12, 18]],
     scores: { factuality: 0.71, aiProbability: 0.34 },
+    collectionId: colLegal,
+    ingestSource: "url",
+    contentType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    status: "complete",
+    tags: ["soc2", "vendor", "security"],
   },
 ];
+
+/** Shown in demo search when “Include facet counts” is enabled. */
+export const DEMO_SEARCH_FACETS: Record<string, { key: string | null; count: number }[]> = {
+  status: [
+    { key: "complete", count: 2 },
+    { key: "processing", count: 1 },
+  ],
+  ingest_source: [
+    { key: "upload", count: 1 },
+    { key: "url", count: 1 },
+  ],
+  content_type: [
+    { key: "application/pdf", count: 1 },
+    { key: "application/vnd.openxmlformats-officedocument.wordprocessingml.document", count: 1 },
+  ],
+  tags: [
+    { key: "policy", count: 1 },
+    { key: "vendor", count: 1 },
+    { key: "soc2", count: 1 },
+  ],
+};
 
 export const DEMO_PLANS: BillingPlan[] = [
   {

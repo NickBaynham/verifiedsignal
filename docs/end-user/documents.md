@@ -89,6 +89,28 @@ You only see documents in **collections your account can access** (see [Workspac
 
 **404** means the id does not exist **or** you do not have access.
 
+## Downloading the original file
+
+**`GET /api/v1/documents/{document_id}/file`**
+
+Returns the raw object stored at **`storage_key`** (same collection access rules as **`GET /documents/{id}`**).
+
+**Query parameters:**
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| **`redirect`** | **`true`** | When **`true`**, the API responds with **302 Found** and a **`Location`** header pointing at a **short-lived presigned URL** (S3/MinIO). The first request still requires **`Authorization: Bearer`**. Follow the redirect to download bytes from object storage (e.g. `curl -L` with Bearer on the first hop only). When **`false`**, the API streams the file in the response body (still authenticated). Use **`redirect=false`** when clients cannot reach the object-storage host directly (e.g. some browser or same-origin SPA flows). |
+
+**Success:**
+
+- **302** — presigned URL in **`Location`** (TTL configured server-side, env **`DOWNLOAD_PRESIGNED_TTL_SECONDS`**, default 3600). Not used when storage is the in-memory test double or presigning fails; the API falls back to streaming.
+- **200** — raw bytes; **`Content-Type`** from the document row when known; **`Content-Disposition: attachment`** with the original filename when available.
+
+**Errors:**
+
+- **404** — document missing, no access, no **`storage_key`**, or object absent from storage
+- **502** — storage read error when streaming (**`redirect=false`** or no presigned URL)
+
 ## Deleting a document
 
 **`DELETE /api/v1/documents/{document_id}`**
@@ -116,10 +138,6 @@ Older schema values such as **`draft`**, **`active`**, **`archived`**, or **`del
 
 - **`ingest_error`** — upload/fetch problems
 - **`enqueue_error`** — could not queue background work
-
-## Getting the file back
-
-Today’s public API focuses on **metadata and processing**. Downloading the original bytes through a dedicated “download” endpoint may or may not be exposed in your deployment—ask your administrator or check OpenAPI for newer routes.
 
 ## Next steps
 

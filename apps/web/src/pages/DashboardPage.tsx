@@ -5,13 +5,15 @@ import { listDocuments } from "../api/documents";
 import { useAuth } from "../context/AuthContext";
 import { isApiBackend } from "../config";
 import { DocumentScoreBadges } from "../components/DocumentScoreBadges";
-import { DEMO_DASHBOARD_METRICS, getDocumentById } from "../demo";
+import { DEMO_DASHBOARD_METRICS, resolveDemoDocument, visibleDashboardRecentIds } from "../demo";
+import { useDemoData } from "../context/DemoDataContext";
 import { ApiError } from "../api/http";
 import { useApiEventSource } from "../hooks/useApiEventSource";
 import type { DocumentSummary } from "../api/types";
 
 export function DashboardPage() {
   const { accessToken } = useAuth();
+  const { deletedDocumentIds } = useDemoData();
   const api = isApiBackend();
   const [items, setItems] = useState<DocumentSummary[]>([]);
   const [total, setTotal] = useState(0);
@@ -40,13 +42,17 @@ export function DashboardPage() {
     void loadDashboard();
   }, [loadDashboard, refreshTick]);
 
-  useApiEventSource(api && !!accessToken, (msg) => {
-    if (msg.type === "document_queued" && msg.payload.document_id) {
-      const id = String(msg.payload.document_id);
-      setLiveLines((prev) => [`document_queued · ${id}`, ...prev].slice(0, 15));
-      setRefreshTick((t) => t + 1);
-    }
-  });
+  useApiEventSource(
+    api && !!accessToken,
+    (msg) => {
+      if (msg.type === "document_queued" && msg.payload.document_id) {
+        const id = String(msg.payload.document_id);
+        setLiveLines((prev) => [`document_queued · ${id}`, ...prev].slice(0, 15));
+        setRefreshTick((t) => t + 1);
+      }
+    },
+    accessToken,
+  );
 
   if (api) {
     return (
@@ -132,6 +138,7 @@ export function DashboardPage() {
   }
 
   const m = DEMO_DASHBOARD_METRICS;
+  const recentIds = visibleDashboardRecentIds(deletedDocumentIds);
   return (
     <>
       <h1 className="page-title">Dashboard</h1>
@@ -165,8 +172,8 @@ export function DashboardPage() {
       <div className="card">
         <h2 style={{ margin: "0 0 1rem", fontSize: "1.05rem" }}>Recent documents</h2>
         <ul style={{ listStyle: "none", margin: 0, padding: 0 }}>
-          {m.recentDocumentIds.map((id) => {
-            const doc = getDocumentById(id);
+          {recentIds.map((id) => {
+            const doc = resolveDemoDocument(id, deletedDocumentIds);
             if (!doc) return null;
             return (
               <li

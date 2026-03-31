@@ -74,6 +74,7 @@ def run_file_intake(
     user_metadata: dict | None = None,
     storage: ObjectStorage | None = None,
     settings: Settings | None = None,
+    auth_sub: str | None = None,
 ) -> dict:
     """
     Synchronous intake pipeline. Caller owns session lifecycle (request-scoped).
@@ -143,10 +144,17 @@ def run_file_intake(
         session.commit()
 
     if job_id:
+        evt_payload: dict = {
+            "document_id": str(document_id),
+            "job_id": job_id,
+            "storage_key": storage_key,
+        }
+        if auth_sub is not None:
+            evt_payload["auth_sub"] = auth_sub
         asyncio.run(
             get_event_hub().publish(
                 "document_queued",
-                {"document_id": str(document_id), "job_id": job_id, "storage_key": storage_key},
+                evt_payload,
             )
         )
 

@@ -1,11 +1,12 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { Link, useParams } from "react-router-dom";
-import { getDocument } from "../api/documents";
+import { Link, useNavigate, useParams } from "react-router-dom";
+import { deleteDocument, downloadOriginalFile, getDocument } from "../api/documents";
 import type { DocumentDetail } from "../api/types";
 import { ApiError } from "../api/http";
 import { useAuth } from "../context/AuthContext";
+import { useDemoData } from "../context/DemoDataContext";
 import { isApiBackend } from "../config";
-import { getDocumentById } from "../demo";
+import { resolveDemoDocument } from "../demo";
 import { ScoreBar } from "../components/ScoreBar";
 
 function highlightTermInText(text: string, term: string): ReactNode {
@@ -36,11 +37,23 @@ function highlightTermInText(text: string, term: string): ReactNode {
 
 export function DocumentReaderPage() {
   const { id } = useParams();
+  const navigate = useNavigate();
   const { accessToken } = useAuth();
+  const { deletedDocumentIds, deleteDemoDocument } = useDemoData();
   const api = isApiBackend();
+
   const [apiDoc, setApiDoc] = useState<DocumentDetail | null>(null);
   const [apiErr, setApiErr] = useState<string | null>(null);
   const [apiLoading, setApiLoading] = useState(false);
+  const [apiDeleteBusy, setApiDeleteBusy] = useState(false);
+  const [apiDownloadBusy, setApiDownloadBusy] = useState(false);
+
+  const [panelTab, setPanelTab] = useState<"scores" | "keywords">("scores");
+  const [focusMode, setFocusMode] = useState(false);
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  const [selectedKeyword, setSelectedKeyword] = useState<string | null>(null);
+
+  const doc = id ? resolveDemoDocument(id, deletedDocumentIds) : undefined;
 
   useEffect(() => {
     if (!api || !accessToken || !id) {
@@ -70,6 +83,39 @@ export function DocumentReaderPage() {
       cancelled = true;
     };
   }, [api, accessToken, id]);
+
+  async function handleDeleteApiDocument() {
+    if (!api || !accessToken || !id || !apiDoc) return;
+    if (!window.confirm(`Remove “${apiDoc.title || apiDoc.original_filename || id}” from your library?`)) return;
+    setApiDeleteBusy(true);
+    try {
+      await deleteDocument(accessToken, id);
+      navigate("/dashboard");
+    } catch (e) {
+      window.alert(e instanceof ApiError ? e.message : "Delete failed");
+    } finally {
+      setApiDeleteBusy(false);
+    }
+  }
+
+  function handleDeleteDemoDocument() {
+    if (!id || !doc) return;
+    if (!window.confirm(`Remove “${doc.title}” from the demo library?`)) return;
+    deleteDemoDocument(id);
+    navigate("/dashboard");
+  }
+
+  async function handleDownloadOriginal() {
+    if (!api || !accessToken || !id) return;
+    setApiDownloadBusy(true);
+    try {
+      await downloadOriginalFile(accessToken, id);
+    } catch (e) {
+      window.alert(e instanceof ApiError ? e.message : "Download failed");
+    } finally {
+      setApiDownloadBusy(false);
+    }
+  }
 
   if (api) {
     if (!id) {
@@ -108,12 +154,39 @@ export function DocumentReaderPage() {
     }
     if (!apiDoc) return null;
 
+    const canon = apiDoc.canonical_score;
+    const showScores =
+      canon &&
+      (canon.factuality_score != null ||
+        canon.ai_generation_probability != null ||
+        canon.fallacy_score != null ||
+        canon.confidence_score != null);
+
     return (
       <>
-        <div style={{ marginBottom: "1rem" }}>
+        <div style={{ marginBottom: "1rem", display: "flex", gap: "0.75rem", flexWrap: "wrap", alignItems: "center" }}>
           <Link to="/dashboard" style={{ fontSize: "0.9rem" }}>
             ← Library
           </Link>
+          {apiDoc.storage_key ? (
+            <button
+              type="button"
+              className="btn btn-primary"
+              disabled={apiDownloadBusy}
+              onClick={() => void handleDownloadOriginal()}
+            >
+              {apiDownloadBusy ? "Downloading…" : "Download original"}
+            </button>
+          ) : null}
+          <button
+            type="button"
+            className="btn"
+            style={{ color: "var(--danger)", borderColor: "rgba(248,113,113,0.45)" }}
+            disabled={apiDeleteBusy}
+            onClick={() => void handleDeleteApiDocument()}
+          >
+            {apiDeleteBusy ? "Removing…" : "Delete document"}
+          </button>
         </div>
         <h1 className="page-title">{apiDoc.title || apiDoc.original_filename || apiDoc.id}</h1>
         <p className="page-sub">
@@ -124,24 +197,32 @@ export function DocumentReaderPage() {
               · <code>{apiDoc.content_type}</code>
             </>
           ) : null}
-          . Canonical scores come from <code>document_scores</code> (pipeline heuristic until ML models ship). Segment-level
-          highlights remain demo-only.
+          . Canonical scores come from <code>document_scores</code> (in-process heuristic and/or HTTP scorer; see{" "}
+          <code>docs/scoring-http.md</code>). Segment-level highlights remain demo-only.
         </p>
-        {apiDoc.canonical_score &&
-        (apiDoc.canonical_score.factuality_score != null ||
-          apiDoc.canonical_score.ai_generation_probability != null) ? (
+        {showScores ? (
           <div className="card" style={{ marginBottom: "1rem" }}>
             <h2 style={{ margin: "0 0 0.75rem", fontSize: "1rem" }}>Scores</h2>
             <p style={{ fontSize: "0.8rem", color: "var(--text-muted)", marginTop: 0 }}>
-              {apiDoc.canonical_score.scorer_name} {apiDoc.canonical_score.scorer_version}
+              {canon.scorer_name} {canon.scorer_version}
             </p>
-            {apiDoc.canonical_score.factuality_score != null ? (
+            {canon.factuality_score != null ? (
               <div style={{ marginBottom: "0.75rem" }}>
-                <ScoreBar value={apiDoc.canonical_score.factuality_score} label="Factuality (heuristic)" />
+                <ScoreBar value={canon.factuality_score} label="Factuality" />
               </div>
             ) : null}
-            {apiDoc.canonical_score.ai_generation_probability != null ? (
-              <ScoreBar value={apiDoc.canonical_score.ai_generation_probability} label="AI-style proxy (heuristic)" />
+            {canon.ai_generation_probability != null ? (
+              <div style={{ marginBottom: "0.75rem" }}>
+                <ScoreBar value={canon.ai_generation_probability} label="AI generation probability" />
+              </div>
+            ) : null}
+            {canon.fallacy_score != null ? (
+              <div style={{ marginBottom: "0.75rem" }}>
+                <ScoreBar value={canon.fallacy_score} label="Fallacy / rhetoric risk" />
+              </div>
+            ) : null}
+            {canon.confidence_score != null ? (
+              <ScoreBar value={canon.confidence_score} label="Confidence" />
             ) : null}
           </div>
         ) : null}
@@ -174,12 +255,6 @@ export function DocumentReaderPage() {
     );
   }
 
-  const doc = id ? getDocumentById(id) : undefined;
-  const [panelTab, setPanelTab] = useState<"scores" | "keywords">("scores");
-  const [focusMode, setFocusMode] = useState(false);
-  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
-  const [selectedKeyword, setSelectedKeyword] = useState<string | null>(null);
-
   const aiScore = doc?.scores.find((s) => s.id === "ai");
   const factScore = doc?.scores.find((s) => s.id === "factuality");
   const showDangerBar = (aiScore && aiScore.value > 0.75) || (factScore && factScore.value <= 0.4);
@@ -197,10 +272,18 @@ export function DocumentReaderPage() {
 
   return (
     <>
-      <div style={{ marginBottom: "1rem" }}>
+      <div style={{ marginBottom: "1rem", display: "flex", gap: "0.75rem", flexWrap: "wrap", alignItems: "center" }}>
         <Link to="/dashboard" style={{ fontSize: "0.9rem" }}>
           ← Library
         </Link>
+        <button
+          type="button"
+          className="btn"
+          style={{ color: "var(--danger)", borderColor: "rgba(248,113,113,0.45)" }}
+          onClick={handleDeleteDemoDocument}
+        >
+          Delete document (demo)
+        </button>
       </div>
       <h1 className="page-title">{doc.title}</h1>
       <p className="page-sub">

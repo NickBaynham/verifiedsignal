@@ -80,6 +80,12 @@ Stub rows use **`kind: stub`**, **`job_status: completed`**, and **`note`**.
 3. **On-prem / Hugging Face** — Run a sidecar HTTP service (transformers + GPU) exposing this contract; keeps the app worker thin and testable.  
 4. **Batch / queue** — For large corpora, enqueue scoring jobs with **`content_fingerprint`** only and let an external batch system callback or poll (still use the same persistence model).
 
+## Planned: Bayesian fusion (~next week)
+
+**Goal:** Combine multiple weak signals into a single interpretable probability (e.g. P(synthetic \| evidence)) using **Bayes’ rule** — start from a **prior** (collection-wide or global base rate), multiply in **likelihood ratios** from the pipeline heuristic, HTTP scorer output, and future features (metadata, extract stats), then normalize. Implementation options: log-odds accumulation, naive Bayes over discretized bins, or a small “fusion” row in **`document_scores`** with **`scorer_name`** like **`verifiedsignal_bayes_v1`** and full working detail in **`score_payload`**.
+
+**Dependencies:** Define labels (e.g. synthetic vs human), choose priors, and decide whether HTTP scorers return **calibrated** probabilities or raw scores that we map to likelihoods. This is a design + incremental PR sequence, not a drop-in one-liner.
+
 ## Tests
 
 - **Unit:** `tests/unit/test_score_http_remote.py`  

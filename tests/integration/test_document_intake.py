@@ -115,6 +115,16 @@ def test_list_get_delete_document(intake_api_client, database_url: str):
     assert detail["sources"]
     assert detail["sources"][0]["source_kind"] == "upload"
 
+    dl = intake_api_client.get(f"/api/v1/documents/{did}/file", params={"redirect": "false"})
+    assert dl.status_code == 200, dl.text
+    assert dl.content == b"one two"
+    assert "attachment" in dl.headers.get("content-disposition", "").lower()
+    assert "lifecycle.txt" in dl.headers.get("content-disposition", "")
+
+    dl302 = intake_api_client.get(f"/api/v1/documents/{did}/file", follow_redirects=False)
+    assert dl302.status_code == 200
+    assert dl302.content == b"one two"
+
     rm = intake_api_client.delete(f"/api/v1/documents/{did}")
     assert rm.status_code == 204
 

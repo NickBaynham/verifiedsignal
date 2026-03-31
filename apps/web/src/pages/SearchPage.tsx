@@ -1,42 +1,123 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
+import { listCollections } from "../api/collections";
 import { searchDocuments } from "../api/search";
 import { ApiError } from "../api/http";
 import { useAuth } from "../context/AuthContext";
+import { useDemoData } from "../context/DemoDataContext";
 import { isApiBackend } from "../config";
-import { DEMO_SEARCH_HITS } from "../demo";
+import { DEMO_COLLECTIONS, DEMO_SEARCH_FACETS, DEMO_SEARCH_HITS } from "../demo";
+import type { SearchHit as DemoSearchHit } from "../demo/types";
+import { SearchFacetsTable, SearchFiltersPanel } from "../components/SearchFiltersPanel";
+import type { FacetBucket } from "../api/types";
 
 type Mode = "keyword" | "semantic" | "hybrid";
 
+function parseTagsInput(tagsInput: string): string[] {
+  return tagsInput
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
+function filterDemoHits(
+  hits: DemoSearchHit[],
+  deleted: ReadonlySet<string>,
+  collectionId: string,
+  contentType: string,
+  status: string,
+  ingestSource: "" | "upload" | "url",
+  tagList: string[],
+): DemoSearchHit[] {
+  return hits.filter((h) => {
+    if (deleted.has(h.documentId)) return false;
+    if (collectionId && h.collectionId !== collectionId) return false;
+    const ct = (h.contentType ?? "").toLowerCase();
+    if (contentType.trim() && !ct.includes(contentType.trim().toLowerCase())) return false;
+    if (status.trim() && (h.status ?? "").toLowerCase() !== status.trim().toLowerCase()) return false;
+    if (ingestSource && h.ingestSource !== ingestSource) return false;
+    for (const tag of tagList) {
+      const want = tag.toLowerCase();
+      const ht = (h.tags ?? []).map((t) => t.toLowerCase());
+      if (!ht.includes(want)) return false;
+    }
+    return true;
+  });
+}
+
 export function SearchPage() {
   const { accessToken } = useAuth();
+  const { deletedDocumentIds } = useDemoData();
   const api = isApiBackend();
   const [q, setQ] = useState("correlation ice cream");
   const [mode, setMode] = useState<Mode>("keyword");
   const [recent] = useState(["goverment policy", "SOC 2", "shark attacks"]);
+
+  const [collectionId, setCollectionId] = useState("");
+  const [contentType, setContentType] = useState("");
+  const [status, setStatus] = useState("");
+  const [ingestSource, setIngestSource] = useState<"" | "upload" | "url">("");
+  const [tagsInput, setTagsInput] = useState("");
+  const [includeFacets, setIncludeFacets] = useState(false);
+
+  const [apiCollections, setApiCollections] = useState<{ id: string; name: string }[]>([]);
   const [apiHits, setApiHits] = useState<
     { document_id: string; title: string | null; snippet: string; score: number | null; status?: string }[]
   >([]);
   const [apiTotal, setApiTotal] = useState(0);
   const [apiIndexStatus, setApiIndexStatus] = useState("");
   const [apiMessage, setApiMessage] = useState<string | null>(null);
+  const [apiFacets, setApiFacets] = useState<Record<string, FacetBucket[]> | null>(null);
   const [apiError, setApiError] = useState<string | null>(null);
   const [apiLoading, setApiLoading] = useState(false);
 
+  const tagList = useMemo(() => parseTagsInput(tagsInput), [tagsInput]);
+
   useEffect(() => {
-    if (!api) return;
+    if (!api || !accessToken) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await listCollections(accessToken);
+        if (!cancelled) {
+          setApiCollections(res.collections.map((c) => ({ id: c.id, name: c.name })));
+        }
+      } catch {
+        if (!cancelled) setApiCollections([]);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [api, accessToken]);
+
+  useEffect(() => {
+    if (!api || !accessToken) {
+      setApiLoading(false);
+      return;
+    }
     let cancelled = false;
     const t = window.setTimeout(() => {
       void (async () => {
         setApiLoading(true);
         setApiError(null);
         try {
-          const res = await searchDocuments(accessToken, { q: q.trim(), limit: 25 });
+          const res = await searchDocuments(accessToken, {
+            q: q.trim(),
+            limit: 25,
+            collectionId: collectionId || undefined,
+            contentType: contentType || undefined,
+            status: status || undefined,
+            ingestSource: ingestSource || undefined,
+            tags: tagList.length ? tagList : undefined,
+            includeFacets,
+          });
           if (cancelled) return;
           setApiHits(res.hits);
           setApiTotal(res.total);
           setApiIndexStatus(res.index_status);
           setApiMessage(res.message ?? null);
+          setApiFacets(res.facets ?? null);
         } catch (e) {
           if (!cancelled) setApiError(e instanceof ApiError ? e.message : "Search failed");
         } finally {
@@ -48,18 +129,34 @@ export function SearchPage() {
       cancelled = true;
       window.clearTimeout(t);
     };
-  }, [api, accessToken, q]);
+  }, [api, accessToken, q, collectionId, contentType, status, ingestSource, tagList, includeFacets]);
 
-  const mockResults = useMemo(() => {
+  const demoCollections = useMemo(() => DEMO_COLLECTIONS.map((c) => ({ id: c.id, name: c.name })), []);
+
+  const filteredDemoHits = useMemo(() => {
+    const base = filterDemoHits(
+      DEMO_SEARCH_HITS,
+      deletedDocumentIds,
+      collectionId,
+      contentType,
+      status,
+      ingestSource,
+      tagList,
+    );
     const query = q.trim().toLowerCase();
-    if (!query) return DEMO_SEARCH_HITS;
-    return DEMO_SEARCH_HITS.filter(
+    if (!query) return base;
+    return base.filter(
       (h) =>
         h.title.toLowerCase().includes(query) ||
         h.snippet.toLowerCase().includes(query) ||
         (mode !== "keyword" && query.length > 2),
     );
-  }, [q, mode]);
+  }, [q, mode, deletedDocumentIds, collectionId, contentType, status, ingestSource, tagList]);
+
+  const demoFacetsToShow = useMemo(() => {
+    if (!includeFacets) return null;
+    return DEMO_SEARCH_FACETS;
+  }, [includeFacets]);
 
   const typoHint = queryLooksLikeTypo(q);
 
@@ -68,8 +165,9 @@ export function SearchPage() {
       <>
         <h1 className="page-title">Search</h1>
         <p className="page-sub">
-          <strong>Use Case 5</strong> — live <code>GET /api/v1/search</code> (OpenSearch or in-process fake index). Mode
-          buttons are UI-only until vector/hybrid search exists on the API.
+          Live <code>GET /api/v1/search</code> with optional filters (<code>collection_id</code>, <code>content_type</code>,{" "}
+          <code>status</code>, <code>ingest_source</code>, <code>tags</code>, <code>include_facets</code>). Mode buttons
+          (keyword / semantic / hybrid) stay UI-only until the API supports retrieval modes.
         </p>
         {apiIndexStatus ? (
           <p style={{ fontSize: "0.85rem", color: "var(--text-muted)", marginTop: 0 }}>
@@ -121,6 +219,22 @@ export function SearchPage() {
           </div>
         </div>
 
+        <SearchFiltersPanel
+          collections={apiCollections}
+          collectionId={collectionId}
+          onCollectionId={setCollectionId}
+          contentType={contentType}
+          onContentType={setContentType}
+          status={status}
+          onStatus={setStatus}
+          ingestSource={ingestSource}
+          onIngestSource={setIngestSource}
+          tagsInput={tagsInput}
+          onTagsInput={setTagsInput}
+          includeFacets={includeFacets}
+          onIncludeFacets={setIncludeFacets}
+        />
+
         <h2 style={{ fontSize: "1.05rem", margin: "1.5rem 0 0.75rem" }}>Results</h2>
         {apiError ? <p className="error-text">{apiError}</p> : null}
         {apiLoading ? <p style={{ color: "var(--text-muted)" }}>Searching…</p> : null}
@@ -146,6 +260,8 @@ export function SearchPage() {
         {!apiLoading && apiHits.length === 0 && !apiError ? (
           <p style={{ color: "var(--text-muted)" }}>No results.{apiTotal > 0 ? ` (${apiTotal} total)` : ""}</p>
         ) : null}
+
+        <SearchFacetsTable facets={apiFacets} />
       </>
     );
   }
@@ -154,8 +270,8 @@ export function SearchPage() {
     <>
       <h1 className="page-title">Search</h1>
       <p className="page-sub">
-        <strong>Use Case 5</strong> — keyword / semantic / hybrid modes, filters as pills, and highlighted snippets
-        (mock; production: Elasticsearch BM25 + kNN).
+        <strong>Use Case 5</strong> — mock hits with the same filter dimensions as the API (collection, content type, status,
+        ingest source, tags, facet table). Mode toggles adjust mock ranking only.
       </p>
 
       <div className="card">
@@ -167,9 +283,9 @@ export function SearchPage() {
           ))}
         </div>
         <div className="field" style={{ marginBottom: 0 }}>
-          <label htmlFor="q">Query</label>
+          <label htmlFor="q-demo">Query</label>
           <input
-            id="q"
+            id="q-demo"
             value={q}
             onChange={(e) => setQ(e.target.value)}
             placeholder="Search library…"
@@ -178,7 +294,11 @@ export function SearchPage() {
         </div>
         {typoHint ? (
           <p style={{ fontSize: "0.9rem", marginTop: "0.5rem" }}>
-            Did you mean <button type="button" className="btn btn-ghost" style={{ padding: 0 }} onClick={() => setQ(typoHint)}>{typoHint}</button>?
+            Did you mean{" "}
+            <button type="button" className="btn btn-ghost" style={{ padding: 0 }} onClick={() => setQ(typoHint)}>
+              {typoHint}
+            </button>
+            ?
           </p>
         ) : null}
         <div style={{ marginTop: "1rem", display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center" }}>
@@ -189,26 +309,38 @@ export function SearchPage() {
             </button>
           ))}
         </div>
-        <div style={{ marginTop: "1rem", display: "flex", flexWrap: "wrap", gap: 6 }}>
-          <span className="pill">Factuality ≥ 0.5</span>
-          <span className="pill">AI ≤ 0.7</span>
-          <span className="pill pill-warn">Appeal to authority</span>
-        </div>
       </div>
+
+      <SearchFiltersPanel
+        collections={demoCollections}
+        collectionId={collectionId}
+        onCollectionId={setCollectionId}
+        contentType={contentType}
+        onContentType={setContentType}
+        status={status}
+        onStatus={setStatus}
+        ingestSource={ingestSource}
+        onIngestSource={setIngestSource}
+        tagsInput={tagsInput}
+        onTagsInput={setTagsInput}
+        includeFacets={includeFacets}
+        onIncludeFacets={setIncludeFacets}
+      />
 
       <h2 style={{ fontSize: "1.05rem", margin: "1.5rem 0 0.75rem" }}>Results</h2>
       <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
-        {mockResults.map((h) => (
+        {filteredDemoHits.map((h) => (
           <li key={h.documentId} className="card" style={{ marginBottom: "0.75rem" }}>
             <div style={{ display: "flex", justifyContent: "space-between", gap: "1rem", flexWrap: "wrap" }}>
               <Link to={`/documents/${h.documentId}`} style={{ fontWeight: 700 }}>
                 {h.title}
               </Link>
-              <div style={{ display: "flex", gap: 6 }}>
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                 <span className="pill pill-ok">F {Math.round(h.scores.factuality * 100)}%</span>
                 <span className={h.scores.aiProbability >= 0.7 ? "pill pill-danger" : "pill"}>
                   AI {Math.round(h.scores.aiProbability * 100)}%
                 </span>
+                {h.ingestSource ? <span className="pill">{h.ingestSource}</span> : null}
               </div>
             </div>
             <p style={{ margin: "0.5rem 0 0", fontSize: "0.9rem", color: "var(--text-muted)" }}>
@@ -220,13 +352,15 @@ export function SearchPage() {
           </li>
         ))}
       </ul>
-      {mockResults.length === 0 ? <p style={{ color: "var(--text-muted)" }}>No mock results for this query.</p> : null}
+      {filteredDemoHits.length === 0 ? <p style={{ color: "var(--text-muted)" }}>No mock results for this query.</p> : null}
+
+      <SearchFacetsTable facets={demoFacetsToShow} />
     </>
   );
 }
 
-function queryLooksLikeTypo(q: string): string | null {
-  if (q.trim().toLowerCase() === "goverment policy") return "government policy";
+function queryLooksLikeTypo(query: string): string | null {
+  if (query.trim().toLowerCase() === "goverment policy") return "government policy";
   return null;
 }
 
@@ -250,5 +384,5 @@ function renderSnippet(snippet: string, ranges: [number, number][]): ReactNode {
       i = b;
     });
   if (i < snippet.length) out.push(snippet.slice(i));
-  return out;
+  return out.length ? out : snippet;
 }

@@ -5,6 +5,7 @@ export interface DocumentSummary {
   status: string;
   original_filename: string | null;
   content_type: string | null;
+  storage_key?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -121,6 +122,8 @@ export interface SearchResponse {
   total: number;
   index_status: string;
   message?: string | null;
+  /** Present when `include_facets=true` on the API. */
+  facets?: Record<string, FacetBucket[]> | null;
 }
 
 export interface IntakeResponse {

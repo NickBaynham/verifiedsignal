@@ -40,6 +40,8 @@ Protected routes need an **`Authorization: Bearer <access_token>`** header. Obta
 5. **`POST /api/v1/documents`** (file) or **`POST /api/v1/documents/from-url`** (JSON) — add a document.
 6. **`GET /api/v1/documents/{id}`** — poll until status shows processing has advanced or failed. For stage-by-stage worker detail, use **`GET /api/v1/documents/{id}/pipeline`** (see [Search and live updates](search-and-events.md#pipeline-polling-worker-progress)).
 
+7. **Search and SSE** — **`GET /api/v1/search`** requires **`Authorization: Bearer`** by default. **`GET /api/v1/events/stream`** requires the same JWT via **`?access_token=`** (browsers) or the **`Authorization`** header. See [Search and live updates](search-and-events.md).
+
 ## Limits you should know about
 
 Exact numbers depend on server configuration (your admin can change them):

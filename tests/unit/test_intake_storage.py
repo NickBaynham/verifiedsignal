@@ -71,3 +71,9 @@ def test_in_memory_delete_object_idempotent():
     store.delete_object("k")
     assert "k" not in store.objects
     store.delete_object("k")
+
+
+@pytest.mark.unit
+def test_in_memory_presigned_get_url_returns_none():
+    store = InMemoryObjectStorage(bucket="b1")
+    assert store.presigned_get_url("k", expires_seconds=60) is None

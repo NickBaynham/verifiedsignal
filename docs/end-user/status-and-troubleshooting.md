@@ -36,7 +36,9 @@ Returns **`service` name**, **`environment`**, **`api_prefix`**, and short **not
 | **204** | Success, no body (delete) | — |
 | **400** | Bad input (validation, URL policy) | Read **`detail`** message |
 | **401** | Missing/invalid auth | Log in or refresh token |
-| **403** | Forbidden (e.g. sync-identity without provision path) | Contact admin or enable provisioning |
+| **401** on **`GET /api/v1/search`** | No Bearer header (default config requires auth) | Send **`Authorization: Bearer …`**; operators may disable **`VERIFIEDSIGNAL_REQUIRE_AUTH_SEARCH`** only for legacy demos |
+| **401** on **`GET /api/v1/events/stream`** | No JWT on connection | Use **`Authorization: Bearer …`** or **`?access_token=`**; see [Search and live updates](search-and-events.md#authentication) |
+| **403** | Forbidden (e.g. sync-identity without provision path, or **`collection_id`** not yours on search) | Contact admin, enable provisioning, or pick an allowed collection |
 | **404** | Not found or no access | Check id and permissions |
 | **502** | Upstream storage failure on upload | Retry or contact support with **`document_id`** if returned |
 | **503** | Auth not configured or dependency unavailable | Contact operator |

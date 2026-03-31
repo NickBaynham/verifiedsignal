@@ -4,7 +4,7 @@
 
 ### Demo mode (default)
 
-If **`VITE_API_URL`** is unset or empty, the app uses **mock data** under `src/demo/` and **client-only login** (password ≥ 3 characters, no network). Use this for stakeholder UX reviews without running the API.
+If **`VITE_API_URL`** is unset or empty, the app uses **mock data** under `src/demo/` and **client-only login** (password ≥ 3 characters, no network). Demo **delete** removes a document from the in-session list (stored in `sessionStorage` under `verifiedsignal_demo_deleted_docs`). Use this for stakeholder UX reviews without running the API.
 
 ### API mode
 
@@ -20,10 +20,10 @@ Set **`VITE_API_URL`** to your FastAPI origin (no trailing slash), e.g. `http://
 |------|-----------|
 | Session | `POST /auth/login`, `POST /auth/refresh`, `POST /auth/logout` |
 | Profile | `GET /api/v1/users/me` |
-| Dashboard | `GET /api/v1/documents`, `GET /api/v1/collections`, `GET /api/v1/events/stream` (SSE) |
-| Document reader | `GET /api/v1/documents/{id}` (`canonical_score` when present — pipeline heuristic and/or promoted HTTP scorer; see `docs/scoring-http.md`) |
+| Dashboard | `GET /api/v1/documents`, `GET /api/v1/collections`, `GET /api/v1/events/stream` (SSE with `?access_token=`; see `docs/end-user/search-and-events.md`) |
+| Document reader | `GET /api/v1/documents/{id}`, `GET /api/v1/documents/{id}/file?redirect=false` (download original), `DELETE /api/v1/documents/{id}` (`canonical_score` when present — heuristic and/or HTTP scorer; see `docs/scoring-http.md`) |
 | Upload | `POST /api/v1/documents` (multipart), `POST /api/v1/documents/from-url`, poll `GET /api/v1/documents/{id}/pipeline` |
-| Search | `GET /api/v1/search` |
+| Search | `GET /api/v1/search` with optional `collection_id`, `content_type`, `status`, `ingest_source`, repeated `tags`, `include_facets` (Bearer required by default on the API). Demo mode mirrors these filters on mock hits and shows a static facet table when enabled. |
 | Collections | `GET /api/v1/collections`, `GET /api/v1/collections/{id}/analytics` |
 
 **Still mock / placeholder:** Reports, Billing, Security pages; demo-style histogram/trend **charts** on the analytics page (API mode adds real facet tables + Postgres KPIs). Search “mode” toggles (keyword / semantic / hybrid) are UI-only until the API supports them.

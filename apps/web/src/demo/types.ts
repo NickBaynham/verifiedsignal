@@ -88,6 +88,12 @@ export interface SearchHit {
   /** Character offsets within snippet for mock yellow highlight */
   highlightRanges: [number, number][];
   scores: { factuality: number; aiProbability: number };
+  /** Mock metadata aligned with API search filters */
+  collectionId?: string;
+  ingestSource?: "upload" | "url";
+  contentType?: string;
+  status?: string;
+  tags?: string[];
 }
 
 export interface BillingPlan {

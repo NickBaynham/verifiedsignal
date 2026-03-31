@@ -8,6 +8,7 @@ from unittest.mock import MagicMock
 
 import pytest
 from app.core.config import reset_settings_cache
+from app.services import search_service as search_service_mod
 from app.services.opensearch_document_index import index_document_sync, reset_fake_opensearch_index
 from app.services.search_service import search_documents
 
@@ -28,8 +29,14 @@ def test_search_documents_fake_keyword_match(monkeypatch: pytest.MonkeyPatch) ->
         status="completed",
     )
 
+    monkeypatch.setattr(
+        search_service_mod,
+        "resolve_accessible_collection_ids",
+        lambda *_a, **_kw: [cid],
+    )
+
     db = MagicMock()
-    out = asyncio.run(search_documents(db, None, "revenue", limit=10))
+    out = asyncio.run(search_documents(db, "unit-test-sub", "revenue", limit=10))
     assert out["index_status"] == "fake"
     assert out["total"] == 1
     assert out["hits"][0]["document_id"] == str(did)
@@ -66,13 +73,26 @@ def test_search_fake_filter_by_tag_and_metadata_text(
         metadata_text="other",
     )
 
+    monkeypatch.setattr(
+        search_service_mod,
+        "resolve_accessible_collection_ids",
+        lambda *_a, **_kw: [cid],
+    )
+
     db = MagicMock()
     out = asyncio.run(
-        search_documents(db, None, "", limit=10, tags=["finance"], ingest_source="upload")
+        search_documents(
+            db,
+            "unit-test-sub",
+            "",
+            limit=10,
+            tags=["finance"],
+            ingest_source="upload",
+        )
     )
     assert out["total"] == 1
     assert out["hits"][0]["document_id"] == str(a)
 
-    out2 = asyncio.run(search_documents(db, None, "acme", limit=10))
+    out2 = asyncio.run(search_documents(db, "unit-test-sub", "acme", limit=10))
     assert out2["total"] == 1
     assert out2["hits"][0]["document_id"] == str(a)

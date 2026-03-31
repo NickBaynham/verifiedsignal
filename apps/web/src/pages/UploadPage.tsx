@@ -42,12 +42,16 @@ export function UploadPage() {
   const [trackDocId, setTrackDocId] = useState<string | null>(null);
   const [pipelineLog, setPipelineLog] = useState<string>("");
 
-  useApiEventSource(api && !!accessToken, (msg) => {
-    if (msg.type === "document_queued" && msg.payload.document_id) {
-      const did = String(msg.payload.document_id);
-      setPipelineLog((prev) => `SSE document_queued ${did}\n${prev}`.slice(0, 4000));
-    }
-  });
+  useApiEventSource(
+    api && !!accessToken,
+    (msg) => {
+      if (msg.type === "document_queued" && msg.payload.document_id) {
+        const did = String(msg.payload.document_id);
+        setPipelineLog((prev) => `SSE document_queued ${did}\n${prev}`.slice(0, 4000));
+      }
+    },
+    accessToken,
+  );
 
   useEffect(() => {
     if (!api || !accessToken || !trackDocId) return;

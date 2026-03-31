@@ -104,6 +104,14 @@ class Settings(BaseSettings):
     s3_bucket: str = Field(default="verifiedsignal", validation_alias="S3_BUCKET")
     s3_use_path_style: bool = Field(default=True, validation_alias="S3_USE_PATH_STYLE")
 
+    download_presigned_ttl_seconds: int = Field(
+        default=3600,
+        ge=60,
+        le=604_800,
+        validation_alias="DOWNLOAD_PRESIGNED_TTL_SECONDS",
+        description="TTL (seconds) for presigned GET URLs on GET /documents/{id}/file when redirect=true.",
+    )
+
     opensearch_url: str = Field(
         default="http://localhost:9200",
         validation_alias="OPENSEARCH_URL",
@@ -122,6 +130,15 @@ class Settings(BaseSettings):
     enqueue_score_after_pipeline: bool = Field(
         default=False,
         validation_alias="ENQUEUE_SCORE_AFTER_PIPELINE",
+    )
+
+    require_auth_for_search: bool = Field(
+        default=True,
+        validation_alias="VERIFIEDSIGNAL_REQUIRE_AUTH_SEARCH",
+    )
+    require_auth_for_sse: bool = Field(
+        default=True,
+        validation_alias="VERIFIEDSIGNAL_REQUIRE_AUTH_SSE",
     )
 
     # Async `score_document` job: `stub` (placeholder row) or `http` (POST to SCORE_HTTP_URL).

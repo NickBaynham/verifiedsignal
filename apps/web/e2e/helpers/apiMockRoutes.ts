@@ -14,6 +14,7 @@ const listPayload = {
       status: "indexed",
       original_filename: "brief.txt",
       content_type: "text/plain",
+      storage_key: `raw/${DOC_ID}/brief.txt`,
       created_at: "2026-01-02T00:00:00Z",
       updated_at: "2026-01-02T00:00:00Z",
     },
@@ -29,7 +30,7 @@ const detailPayload = {
   canonical_score: {
     factuality_score: 0.72,
     ai_generation_probability: 0.18,
-    fallacy_score: null,
+    fallacy_score: 0.52,
     confidence_score: 0.35,
     scorer_name: "verifiedsignal_heuristic",
     scorer_version: "1.0.0",
@@ -41,17 +42,21 @@ const detailPayload = {
  */
 export async function installApiMockRoutes(page: Page) {
   const origin = E2E_MOCK_API_ORIGIN;
+  let e2eDocDeleted = false;
 
-  await page.route(`${origin}/api/v1/events/stream`, async (route) => {
-    await route.fulfill({
-      status: 200,
-      headers: {
-        "Content-Type": "text/event-stream",
-        "Cache-Control": "no-cache",
-      },
-      body: 'data: {"type":"connected","payload":{}}\n\n',
-    });
-  });
+  await page.route(
+    (url) => url.toString().split("?")[0] === `${origin}/api/v1/events/stream`,
+    async (route) => {
+      await route.fulfill({
+        status: 200,
+        headers: {
+          "Content-Type": "text/event-stream",
+          "Cache-Control": "no-cache",
+        },
+        body: 'data: {"type":"connected","payload":{}}\n\n',
+      });
+    },
+  );
 
   await page.route(
     (url) => {
@@ -177,10 +182,82 @@ export async function installApiMockRoutes(page: Page) {
             document_count: 2,
             created_at: "2026-01-01T00:00:00Z",
           },
+          {
+            id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+            organization_id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+            name: "Other collection",
+            slug: "other",
+            document_count: 0,
+            created_at: "2026-01-01T00:00:00Z",
+          },
         ],
       }),
     });
   });
+
+  await page.route(
+    (url) => {
+      const base = url.toString().split("?")[0];
+      return base === `${origin}/api/v1/documents/${DOC_ID}/file`;
+    },
+    async (route) => {
+      if (route.request().method() !== "GET") {
+        await route.fallback();
+        return;
+      }
+      if (e2eDocDeleted) {
+        await route.fulfill({
+          status: 404,
+          contentType: "application/json",
+          body: JSON.stringify({ detail: "Document not found" }),
+        });
+        return;
+      }
+      await route.fulfill({
+        status: 200,
+        headers: {
+          "Content-Type": "text/plain",
+          "Content-Disposition": 'attachment; filename="brief.txt"',
+          "Access-Control-Allow-Origin": "http://127.0.0.1:5173",
+          "Access-Control-Allow-Credentials": "true",
+          "Access-Control-Expose-Headers": "Content-Disposition",
+        },
+        body: "e2e mock original bytes",
+      });
+    },
+  );
+
+  await page.route(
+    (url) => {
+      const base = url.toString().split("?")[0];
+      return base === `${origin}/api/v1/documents/${DOC_ID}`;
+    },
+    async (route) => {
+      const method = route.request().method();
+      if (method === "DELETE") {
+        e2eDocDeleted = true;
+        await route.fulfill({ status: 204, body: "" });
+        return;
+      }
+      if (method === "GET") {
+        if (e2eDocDeleted) {
+          await route.fulfill({
+            status: 404,
+            contentType: "application/json",
+            body: JSON.stringify({ detail: "Document not found" }),
+          });
+          return;
+        }
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify(detailPayload),
+        });
+        return;
+      }
+      await route.fallback();
+    },
+  );
 
   await page.route(
     (url) => {
@@ -201,11 +278,7 @@ export async function installApiMockRoutes(page: Page) {
         return;
       }
       if (path === DOC_ID) {
-        await route.fulfill({
-          status: 200,
-          contentType: "application/json",
-          body: JSON.stringify(detailPayload),
-        });
+        await route.fallback();
         return;
       }
       await route.fulfill({
@@ -226,7 +299,11 @@ export async function installApiMockRoutes(page: Page) {
         await route.fulfill({
           status: 200,
           contentType: "application/json",
-          body: JSON.stringify(listPayload),
+          body: JSON.stringify(
+            e2eDocDeleted
+              ? { items: [], total: 0, user_id: "e2e-sub" }
+              : listPayload,
+          ),
         });
         return;
       }
@@ -263,24 +340,33 @@ export async function installApiMockRoutes(page: Page) {
   await page.route(
     (url) => url.toString().startsWith(`${origin}/api/v1/search`),
     async (route) => {
+      const u = new URL(route.request().url());
+      const col = u.searchParams.get("collection_id");
+      const wantFacets = u.searchParams.get("include_facets") === "true";
+      const baseHit = {
+        document_id: DOC_ID,
+        title: "E2E Policy Brief",
+        score: 1,
+        snippet: "Hello from API mock document.",
+        status: "indexed",
+      };
+      let hits = e2eDocDeleted || (col != null && col !== COL_ID) ? [] : [baseHit];
       await route.fulfill({
         status: 200,
         contentType: "application/json",
         body: JSON.stringify({
-          query: "",
-          limit: 25,
-          hits: [
-            {
-              document_id: DOC_ID,
-              title: "E2E Policy Brief",
-              score: 1,
-              snippet: "Hello from API",
-              status: "indexed",
-            },
-          ],
-          total: 1,
+          query: u.searchParams.get("q") ?? "",
+          limit: Number(u.searchParams.get("limit")) || 25,
+          hits,
+          total: hits.length,
           index_status: "fake",
           message: null,
+          facets: wantFacets
+            ? {
+                status: [{ key: "indexed", count: hits.length }],
+                ingest_source: [{ key: "upload", count: hits.length }],
+              }
+            : null,
         }),
       });
     },

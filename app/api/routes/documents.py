@@ -4,13 +4,16 @@ from __future__ import annotations
 
 import uuid
 from typing import Annotated
+from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Response, UploadFile
+from fastapi.responses import RedirectResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_db, get_object_storage_dep
 from app.auth.dependencies import get_current_user
+from app.core.config import get_settings
 from app.db.models import DocumentScore
 from app.schemas.document import (
     CanonicalScoreOut,
@@ -93,6 +96,91 @@ def get_document_pipeline(
     if out is None:
         raise HTTPException(status_code=404, detail="Document not found")
     return out
+
+
+def _content_disposition_attachment(filename: str) -> str:
+    ascii_fallback = filename.encode("ascii", "ignore").decode("ascii").strip() or "download.bin"
+    ascii_fallback = ascii_fallback.replace('"', "").replace("\\", "")
+    utf8_quoted = quote(filename, safe="")
+    return f"attachment; filename=\"{ascii_fallback}\"; filename*=UTF-8''{utf8_quoted}"
+
+
+@router.get(
+    "/{document_id}/file",
+    response_model=None,
+    responses={
+        302: {"description": "Redirect to a short-lived presigned object URL (when supported)."},
+        404: {"description": "Document not found, no original on file, or object missing."},
+        502: {"description": "Storage read failure when streaming the body."},
+    },
+)
+def download_document_original(
+    document_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    storage: ObjectStorage = Depends(get_object_storage_dep),
+    _user_id: str = Depends(get_current_user),
+    redirect: Annotated[
+        bool,
+        Query(
+            description=(
+                "When true (default), return 302 to a presigned GET URL if the storage backend "
+                "supports signing. Otherwise stream bytes through this API (still requires Bearer auth)."
+            ),
+        ),
+    ] = True,
+) -> Response | RedirectResponse:
+    """
+    Download the stored original bytes (same access rules as GET /documents/{id}).
+
+    With real S3/MinIO, **redirect=true** avoids proxying large files through the API. Clients that
+    cannot follow redirects to the object host (or need a single authenticated hop) should use
+    **redirect=false**.
+    """
+    settings = get_settings()
+    out = get_document_for_user(db, document_id=document_id, auth_sub=user_id)
+    if out is None:
+        raise HTTPException(status_code=404, detail="Document not found")
+    doc, _sources = out
+    if not doc.storage_key:
+        raise HTTPException(
+            status_code=404,
+            detail="Original file is not available for this document",
+        )
+    if not storage.object_exists(doc.storage_key):
+        raise HTTPException(
+            status_code=404,
+            detail="Original file is missing from object storage",
+        )
+
+    filename = doc.original_filename or doc.storage_key.rsplit("/", 1)[-1]
+    media_type = doc.content_type or "application/octet-stream"
+
+    if redirect:
+        signed = storage.presigned_get_url(
+            doc.storage_key,
+            expires_seconds=settings.download_presigned_ttl_seconds,
+        )
+        if signed:
+            return RedirectResponse(url=signed, status_code=302)
+
+    try:
+        body = storage.get_bytes(doc.storage_key)
+    except KeyError:
+        raise HTTPException(
+            status_code=404,
+            detail="Original file is missing from object storage",
+        ) from None
+    except StorageUploadError as e:
+        raise HTTPException(
+            status_code=502,
+            detail={"message": "failed to read object from storage", "error": str(e)},
+        ) from e
+
+    return Response(
+        content=body,
+        media_type=media_type,
+        headers={"Content-Disposition": _content_disposition_attachment(filename)},
+    )
 
 
 @router.get("/{document_id}", response_model=DocumentDetailOut)
@@ -187,7 +275,6 @@ def upload_document(
 
     Sync handler so `asyncio.run` inside storage/queue helpers is safe (runs on a worker thread).
     """
-    _ = _user_id
     raw = file.file.read()
     try:
         um = validate_user_metadata(parse_metadata_json_string(metadata))
@@ -200,6 +287,7 @@ def upload_document(
             collection_id_param=collection_id,
             user_metadata=um,
             storage=storage,
+            auth_sub=_user_id,
         )
     except IntakeValidationError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e

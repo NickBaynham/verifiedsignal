@@ -39,7 +39,7 @@ test.describe("API mode (mocked HTTP)", () => {
     await page.getByRole("button", { name: /Continue to dashboard/i }).click();
     await page.getByRole("navigation").getByRole("link", { name: "Collections" }).click();
     await expect(page.getByRole("cell", { name: "E2E Inbox", exact: true })).toBeVisible();
-    await page.getByRole("link", { name: "Analytics →" }).click();
+    await page.getByRole("row", { name: /E2E Inbox/ }).getByRole("link", { name: "Analytics →" }).click();
     await expect(page.getByRole("heading", { name: "E2E Inbox" })).toBeVisible();
     await expect(page.getByText(/OpenSearch facet buckets/i)).toBeVisible();
   });
@@ -58,5 +58,53 @@ test.describe("API mode (mocked HTTP)", () => {
     await page.getByRole("button", { name: /Continue to dashboard/i }).click();
     await page.goto(`/documents/${DOC_ID}`);
     await expect(page.getByRole("heading", { name: "E2E Policy Brief" })).toBeVisible();
+  });
+
+  test("document reader shows canonical score dimensions", async ({ page }) => {
+    await page.goto("/login");
+    await page.getByLabel("Password", { exact: false }).fill("pw");
+    await page.getByRole("button", { name: /Continue to dashboard/i }).click();
+    await page.goto(`/documents/${DOC_ID}`);
+    await expect(page.getByText(/Fallacy \/ rhetoric risk/i)).toBeVisible();
+    await expect(page.getByText(/Confidence/i)).toBeVisible();
+  });
+
+  test("download original streams file", async ({ page }) => {
+    await page.goto("/login");
+    await page.getByLabel("Password", { exact: false }).fill("pw");
+    await page.getByRole("button", { name: /Continue to dashboard/i }).click();
+    await page.goto(`/documents/${DOC_ID}`);
+    const [download] = await Promise.all([
+      page.waitForEvent("download"),
+      page.getByRole("button", { name: "Download original" }).click(),
+    ]);
+    expect(download.suggestedFilename()).toBe("brief.txt");
+  });
+
+  test("search optional facets and collection filter", async ({ page }) => {
+    await page.goto("/login");
+    await page.getByLabel("Password", { exact: false }).fill("pw");
+    await page.getByRole("button", { name: /Continue to dashboard/i }).click();
+    await page.getByRole("navigation").getByRole("link", { name: "Search" }).click();
+    await page.getByRole("checkbox", { name: /Include facet counts/i }).check();
+    await expect(page.getByRole("heading", { name: "Facets" })).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByRole("cell", { name: "indexed", exact: true })).toBeVisible();
+
+    await page.getByLabel("Collection").selectOption(COL_ID);
+    await expect(page.getByRole("link", { name: "E2E Policy Brief" })).toBeVisible({ timeout: 20_000 });
+
+    await page.getByLabel("Collection").selectOption("bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb");
+    await expect(page.getByRole("link", { name: "E2E Policy Brief" })).not.toBeVisible({ timeout: 20_000 });
+  });
+
+  test("delete document returns to dashboard and clears list", async ({ page }) => {
+    page.once("dialog", (d) => d.accept());
+    await page.goto("/login");
+    await page.getByLabel("Password", { exact: false }).fill("pw");
+    await page.getByRole("button", { name: /Continue to dashboard/i }).click();
+    await page.goto(`/documents/${DOC_ID}`);
+    await page.getByRole("button", { name: "Delete document" }).click();
+    await expect(page).toHaveURL(/\/dashboard$/);
+    await expect(page.getByRole("link", { name: "E2E Policy Brief" })).not.toBeVisible();
   });
 });

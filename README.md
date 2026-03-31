@@ -8,7 +8,7 @@ This repo is an **early scaffold** with the following in place:
 
 - **CLI package** — Python **3.11+**, `src/verifiedsignal/`, small CLI (`pdm run python -m verifiedsignal`, `pdm run verifiedsignal`).
 - **Supabase session auth (optional)** — FastAPI routes under **`/auth`** (signup, login with **httpOnly** refresh cookie on path `/auth`, refresh, logout, reset email, **`POST /auth/sync-identity`**); JWT validation via **JWKS** or **HS256** (`app/auth/`). Bearer requests can **auto-provision** Postgres **`users`** + personal **org** + **Inbox** collection from the JWT `sub`. Protected examples: **`/api/v1/documents`**, **`/api/v1/collections`**, **`/api/v1/users/me`**. See **[`docs/end-user/README.md`](docs/end-user/README.md)** (end-user guide), **[`docs/auth-supabase.md`](docs/auth-supabase.md)**, **[`docs/tenancy-postgres.md`](docs/tenancy-postgres.md)**, **[`docs/accounts-and-collections.md`](docs/accounts-and-collections.md)** (short pointer), **[`supabase/README.md`](supabase/README.md)**, and **`apps/web/README.md`** for the React/Vite side (**`VITE_API_URL`** enables API-backed dashboard, documents, upload, search, collections, collection analytics, SSE + pipeline polling on upload/dashboard, and **`canonical_score`** on document detail; mock demo when unset).
-- **HTTP API** — root package **`app/`**: **FastAPI** (`app/main.py`), **`/api/v1`** routes for **health** (Postgres, Redis, object storage, OpenSearch reachability), info, **Phase 1 document intake** (`POST /api/v1/documents` multipart upload → Postgres + MinIO/S3 + ARQ), **keyword search** (`GET /api/v1/search` over OpenSearch or **`USE_FAKE_OPENSEARCH`** in tests), **collection analytics** (`GET /api/v1/collections/{id}/analytics` — index facets + Postgres score rollups), **document pipeline status** (`GET /api/v1/documents/{id}/pipeline`), and **SSE** (`/api/v1/events/stream`). **SQLAlchemy** session factory for Postgres (`app/db/session.py`); placeholder auth (`app/auth/placeholder.py`).
+- **HTTP API** — root package **`app/`**: **FastAPI** (`app/main.py`), **`/api/v1`** routes for **health** (Postgres, Redis, object storage, OpenSearch reachability), info, **Phase 1 document intake** (`POST /api/v1/documents` multipart upload → Postgres + MinIO/S3 + ARQ), **keyword search** (`GET /api/v1/search` over OpenSearch or **`USE_FAKE_OPENSEARCH`** in tests; **Bearer required** by default), **collection analytics** (`GET /api/v1/collections/{id}/analytics` — index facets + Postgres score rollups), **document pipeline status** (`GET /api/v1/documents/{id}/pipeline`), **signed original download** (`GET /api/v1/documents/{id}/file` — presigned redirect or streamed), and **SSE** (`/api/v1/events/stream`; **JWT** via **`Authorization`** or **`?access_token=`** by default). **SQLAlchemy** session factory for Postgres (`app/db/session.py`); JWT validation and dependencies in **`app/auth/dependencies.py`** (Supabase-compatible); **`app/auth/placeholder.py`** is legacy/minimal.
 - **Worker** — root package **`worker/`**: **[ARQ](https://arq-docs.helpmanual.io/)** worker on Redis (`pdm run worker`), `process_document` runs scaffold stages: **ingest** (storage head check), **extract** (PDF/DOCX/plain → **`documents.body_text`** + optional **`extract_artifact_key`** artifact), **enrich** (text stats on **`body_text`** in **`pipeline_events`**), **score** (canonical **heuristic** row in **`document_scores`**, plus optional **`score_document`** job when **`ENQUEUE_SCORE_AFTER_PIPELINE=true`** — **stub** or **HTTP** remote scorer per **`SCORE_ASYNC_BACKEND`** / **`SCORE_HTTP_URL`**, retries + idempotency; see **[`docs/scoring-http.md`](docs/scoring-http.md)**), **index** (OpenSearch), **finalize**. See **[`docs/pipeline-stages.md`](docs/pipeline-stages.md)**. **Vector** search and **in-process LLM** calls are still future work; HTTP scoring delegates to **your** model service.
 - **PDM** — `pyproject.toml`, **`pdm.lock`**, scripts: **`pdm run api`** (uvicorn reload), **`pdm run api-prod`**, **`pdm run worker`**, dev group (**pytest**, **ruff**, etc.).
 - **Makefile** — `setup`, `lock` / `sync`, `test` / `test-unit` / `test-integration` / `test-e2e` / **`test-api`**, **`ci-local`** / **`ci-local-stop`**, `lint`, `format`, Docker targets.
@@ -127,6 +127,10 @@ make test-integration
 
 **Still stubbed / later stages:** **First-party** LLM scoring inside this repo (today: **heuristic** in-pipeline + optional async **`score_document`**: **stub** or **operator HTTP** endpoint — **[`docs/scoring-http.md`](docs/scoring-http.md)**), **vector** search, and durable cross-instance SSE (today’s **`EventHub`** is in-process; the SPA also **polls** **`GET /api/v1/documents/{id}/pipeline`** for worker progress). **Keyword search** uses **text extract** (PDF/DOCX/plain) + **OpenSearch** (or **`USE_FAKE_OPENSEARCH`**). Pipeline persistence: **`pipeline_runs`** / **`pipeline_events`**; optional **`ENQUEUE_SCORE_AFTER_PIPELINE`** queues **`score_document`** (ARQ **`max_tries=5`** on transient scorer failures).
 
+**Near-term (keep in mind):** **Bayesian fusion** for ratings — treat **`ai_generation_probability`** / related fields as updatable **posteriors** (prior + likelihoods from heuristic, HTTP scorer, and future signals). Not implemented yet; sketched under **[`docs/scoring-http.md`](docs/scoring-http.md)** (*Planned: Bayesian fusion*). Target for design + first slice: **~next week**.
+
+**Search + SSE auth:** **`VERIFIEDSIGNAL_REQUIRE_AUTH_SEARCH`** and **`VERIFIEDSIGNAL_REQUIRE_AUTH_SSE`** (default **true**) enforce Bearer JWT for **`GET /api/v1/search`** and **`GET /api/v1/events/stream`** (browsers: **`?access_token=`** on the stream). SSE events are filtered by **`payload.auth_sub`**. See **[`docs/end-user/search-and-events.md`](docs/end-user/search-and-events.md)**.
+
 ### Run the API (uvicorn)
 
 From the repo root (PDM puts the project on `PYTHONPATH`):
@@ -187,17 +191,21 @@ Point the API at MinIO with **`S3_ENDPOINT_URL`** (e.g. `http://127.0.0.1:9000`)
 
 ```bash
 curl -s http://127.0.0.1:8000/api/v1/health | jq
+# Intake and search need a Bearer access token from POST /auth/login (see docs/auth-supabase.md).
+# export TOKEN='eyJ...'
 curl -s -X POST http://127.0.0.1:8000/api/v1/documents \
+  -H "Authorization: Bearer $TOKEN" \
   -F "file=@./README.md;type=text/markdown" \
   -F "title=Demo upload" | jq
 # Optional explicit collection (otherwise VERIFIEDSIGNAL_DEFAULT_COLLECTION_ID / seeded default-inbox)
 # -F "collection_id=00000000-0000-4000-8000-000000000002"
 ```
 
-SSE (example — streams until you Ctrl+C):
+SSE (streams until Ctrl+C; same **`$TOKEN`**, or **`?access_token=`** if you cannot send a header):
 
 ```bash
-curl -N http://127.0.0.1:8000/api/v1/events/stream
+curl -N -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8000/api/v1/events/stream
+# curl -N "http://127.0.0.1:8000/api/v1/events/stream?access_token=$TOKEN"
 ```
 
 ## Useful commands

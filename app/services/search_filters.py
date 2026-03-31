@@ -10,7 +10,7 @@ from typing import Any
 class SearchFilters:
     """
     ``collection_ids``:
-      - ``None`` — do not filter by collection (unauthenticated / legacy behavior).
+      - ``None`` — do not filter by collection (only when ``VERIFIEDSIGNAL_REQUIRE_AUTH_SEARCH=false``).
       - empty tuple — no accessible collections (return no hits).
       - non-empty — restrict to these collection id strings.
     """

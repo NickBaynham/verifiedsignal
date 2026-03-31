@@ -25,4 +25,12 @@ test.describe("Collections & document reader", () => {
     await page.goto("/documents/00000000-0000-4000-8000-000000000099");
     await expect(page.getByRole("heading", { name: "Document not found" })).toBeVisible();
   });
+
+  test("demo delete removes document from dashboard list", async ({ page }) => {
+    page.once("dialog", (d) => d.accept());
+    await page.getByRole("link", { name: "Policy brief — summer outreach pilot" }).click();
+    await page.getByRole("button", { name: "Delete document (demo)" }).click();
+    await expect(page).toHaveURL(/\/dashboard$/);
+    await expect(page.getByRole("link", { name: "Policy brief — summer outreach pilot" })).not.toBeVisible();
+  });
 });
