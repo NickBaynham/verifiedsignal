@@ -19,6 +19,7 @@ The pipeline’s **`score`** stage **always** writes a **canonical** heuristic r
 | **`SCORE_HTTP_MAX_BODY_CHARS`** | Truncate **`body_text`** in the request (default **12000**). |
 | **`SCORE_HTTP_SCORER_VERSION`** | Stored on each row as **`scorer_version`** (default **`1.0.0`**). Bump when your remote contract changes. |
 | **`SCORE_API_PROMOTE_CANONICAL`** | If **`true`**, a **successful** HTTP score **demotes all existing scores** for the document and sets the new HTTP row **`is_canonical=true`**. Default **`false`**. |
+| **`REFERENCE_SCORER_BEARER_TOKEN`** | *(reference scorer process only — see [Reference HTTP scorer](#reference-http-scorer-copy-paste-local-test))* Optional; when set, the bundled **`scripts/reference_http_scorer`** app requires **`Authorization: Bearer …`** matching this value (use the same string as **`SCORE_HTTP_BEARER_TOKEN`** on the worker). |
 
 ## ARQ retries
 

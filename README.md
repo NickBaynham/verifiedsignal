@@ -13,7 +13,8 @@ This repo is an **early scaffold** with the following in place:
 - **PDM** — `pyproject.toml`, **`pdm.lock`**, scripts: **`pdm run api`** (uvicorn reload), **`pdm run api-prod`**, **`pdm run worker`**, **`pdm run reference-http-scorer`** (minimal FastAPI scorer for **`SCORE_ASYNC_BACKEND=http`** — see **[`docs/scoring-http.md`](docs/scoring-http.md)**), dev group (**pytest**, **ruff**, etc.).
 - **Makefile** — `setup`, `lock` / `sync`, `test` / `test-unit` / `test-integration` / `test-e2e` / **`test-api`**, **`ci-local`** / **`ci-local-stop`**, `lint`, `format`, Docker targets.
 - **Tests** — **`pytest`** markers: **`unit`**, **`integration`**, **`e2e`**, **`api`**. See **[`tests/README.md`](tests/README.md)**.
-- **CI** — **[`.github/workflows/ci.yml`](.github/workflows/ci.yml)** — **Python** job: Ruff on `src`, `tests`, `app`, `worker`, **`scripts`**; Postgres **16** + migrations; **`pytest`** with **`--cov=app/services`** (line coverage floor **45%** via **`pyproject.toml`** `[tool.coverage.report]`, **`term-missing`** + **`coverage.xml`** artifact). **Web** job: **`apps/web`** — `npm ci`, Playwright Chromium, **`npm run build`**, **`test:unit`**, **`test:e2e`**, **`test:e2e:api-mock`**.
+- **CI** — **[`.github/workflows/ci.yml`](.github/workflows/ci.yml)** — **Python** job: Ruff on `src`, `tests`, `app`, `worker`, **`scripts`**; **`pip-audit`** on exported requirements; Postgres **16** + migrations; **`pytest`** with **`--cov=app/services`** (line coverage floor **45%** via **`pyproject.toml`** `[tool.coverage.report]`, **`term-missing`** + **`coverage.xml`** artifact). **Web** job: **`apps/web`** — `npm ci`, **`npm audit`**, Playwright Chromium, **`npm run build`**, **`test:unit`**, **`test:e2e`**, **`test:e2e:api-mock`**. **Dependabot** — **[`.github/dependabot.yml`](.github/dependabot.yml)** for **GitHub Actions**, **pip** (root / PDM lock), and **`apps/web`** npm.
+- **Security / hardening (high level)** — **`ENVIRONMENT=staging`** is treated like production for **client-visible** surfaces: **`/health`** omits dependency error/DSN detail, and **Swagger/OpenAPI** stay off unless **`EXPOSE_OPENAPI_DOCS=true`**. **`ENVIRONMENT=production|prod`** additionally logs startup warnings for **`USE_FAKE_*`** and for **`VERIFIEDSIGNAL_ALLOW_DEFAULT_COLLECTION_FALLBACK=true`** (risky multi-tenant default). **`VERIFIEDSIGNAL_ALLOW_DEFAULT_COLLECTION_FALLBACK`** defaults to **`false`**; set **`true`** in **`.env.example`-style** local dev when you rely on the seeded default inbox. Per-IP **rate limits** (**slowapi**) apply to **`/auth/*`** and document intake (**`RATE_LIMIT_*`**, **`RATE_LIMIT_ENABLED`** in **`.env.example`**); limits are **in-memory per API process** (not shared across replicas). Run **`pdm export -f requirements --without-hashes -o /tmp/r.txt && pdm run pip-audit -r /tmp/r.txt`** locally to match CI.
 - **Docker** — **`Dockerfile`** copies `app/`, `worker/`, `src/`, `tests/`, `db/`, sets **`PYTHONPATH=/app`**, default CMD **`api-prod`** (uvicorn).
 - **Docker Compose** — infra + runtimes:
   - **PostgreSQL**, **Redis**, **MinIO**, **OpenSearch**, **Dashboards**
@@ -75,11 +76,11 @@ make test    # unit, e2e, api; integration skips if DATABASE_URL is unset
 make lint
 ```
 
-Integration tests that need a database are skipped unless **`DATABASE_URL`** is set and migrations **001**, **002**, and **003** are applied. Markers and behavior are described in **[`tests/README.md`](tests/README.md)**.
+Integration tests that need a database are skipped unless **`DATABASE_URL`** is set and migrations **001** through **005** are applied. Markers and behavior are described in **[`tests/README.md`](tests/README.md)**.
 
 ### Full suite like CI (ephemeral Postgres in Docker)
 
-**[`Makefile`](Makefile)** includes targets that mirror **GitHub Actions**: **Postgres 16**, same user/password/database as CI, migrations **001**–**003**, then **Ruff** and **pytest** with the correct **`DATABASE_URL`**.
+**[`Makefile`](Makefile)** includes targets that mirror **GitHub Actions**: **Postgres 16**, same user/password/database as CI, migrations **001**–**005**, then **Ruff** (including **`scripts/`**) and **pytest** with **`--cov=app/services`** and the correct **`DATABASE_URL`**.
 
 ```bash
 make setup          # once: dependencies + .env from example if missing
@@ -105,7 +106,7 @@ If you prefer the project’s **Compose** Postgres:
 docker compose up -d postgres
 ```
 
-Apply **001**, **002**, and **003** from the repo root (examples in **[`db/README.md`](db/README.md)**), then point **`DATABASE_URL`** at the instance (typically **`postgresql://verifiedsignal:verifiedsignal@localhost:5432/verifiedsignal`** from the host) and run:
+Apply **001** through **005** from the repo root (examples in **[`db/README.md`](db/README.md)**), or run **`make migrate`** when using Compose Postgres, then point **`DATABASE_URL`** at the instance (typically **`postgresql://verifiedsignal:verifiedsignal@localhost:5432/verifiedsignal`** from the host) and run:
 
 ```bash
 make test
@@ -138,7 +139,7 @@ From the repo root (PDM puts the project on `PYTHONPATH`):
 ```bash
 make setup
 export DATABASE_URL=postgresql://verifiedsignal:verifiedsignal@localhost:5432/verifiedsignal
-# Apply migrations 001–003 — see db/README.md
+# Apply migrations 001–005 — see db/README.md
 export REDIS_URL=redis://localhost:6379/0
 export OPENSEARCH_URL=http://127.0.0.1:9200
 # MinIO / S3 (omit and set USE_FAKE_STORAGE=true to store bytes in-memory only)
@@ -222,7 +223,7 @@ curl -N -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8000/api/v1/events/st
 | `make lock` | Refresh `pdm.lock` after dependency changes |
 | `make sync` | Install exactly what `pdm.lock` specifies |
 | `make test` | Pytest (unit + e2e; integration skips if `DATABASE_URL` unset) |
-| `make ci-local` | Ephemeral Postgres **16** + migrations **001**–**003** + Ruff + pytest; tears down container when finished (even on failure) |
+| `make ci-local` | Ephemeral Postgres **16** + migrations **001**–**005** + Ruff (**`scripts/`** included) + pytest with **`--cov=app/services`**; tears down container when finished (even on failure) |
 | `make ci-local-stop` | Remove the **`ci-local`** Postgres container (e.g. after **`ci-local-postgres`** alone) |
 | `make test-unit` | `pytest -m unit` |
 | `make test-integration` | `pytest -m integration` (requires `DATABASE_URL` + migrations) |
@@ -237,11 +238,11 @@ curl -N -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8000/api/v1/events/st
 |--------|---------|
 | `pdm run python -m pytest` | Same as `make test` (avoids missing `.venv/bin/pytest` on some setups) |
 | `pdm run python -m pytest -m "unit or integration"` | Typical CI subset (with `DATABASE_URL` set) |
-| `pdm run python -m pytest --cov=verifiedsignal` | Tests with coverage (pytest-cov installed) |
+| `pdm run python -m pytest --cov=app/services --cov-report=term-missing` | Same coverage target as CI (**`fail_under`** in **`pyproject.toml`**) |
 | `pdm run api` / `pdm run api-prod` | Uvicorn (`app.main:app`) |
 | `pdm run worker` | ARQ worker (`worker.main.WorkerSettings`) |
-| `pdm run ruff check src tests app worker` | Same as `make lint` |
-| `pdm run ruff format src tests app worker` | Same as `make format` |
+| `pdm run ruff check src tests app worker scripts` | Same as `make lint` |
+| `pdm run ruff format src tests app worker scripts` | Same as `make format` |
 
 ### Docker and Compose
 
@@ -290,13 +291,13 @@ Run `make` or `make help` to print this list from the Makefile.
 | `make lock` | Regenerates `pdm.lock` from `pyproject.toml` |
 | `make sync` / `make install` | Installs exactly what `pdm.lock` specifies |
 | `make test` | `pdm run python -m pytest` (see `make test-unit`, `test-integration`, `test-e2e`) |
-| `make ci-local` | CI-like Postgres + migrations + Ruff + pytest; auto-removes container on exit |
+| `make ci-local` | CI-like Postgres + migrations **001**–**005** + Ruff + pytest (**`app/services`** coverage); auto-removes container on exit |
 | `make ci-local-stop` | Tear down **`ci-local`** Postgres container manually |
 | `make test-unit` | `pdm run python -m pytest -m unit` |
 | `make test-integration` | `pdm run python -m pytest -m integration` |
 | `make test-e2e` | `pdm run python -m pytest -m e2e` |
-| `make lint` | `pdm run python -m ruff check src tests app worker` |
-| `make format` | `pdm run python -m ruff format src tests app worker` |
+| `make lint` | `pdm run python -m ruff check src tests app worker scripts` |
+| `make format` | `pdm run python -m ruff format src tests app worker scripts` |
 | `make clean` | Removes common build and cache directories |
 | `make config` | Copies `.env.example` → `.env` only if `.env` is missing |
 | `make resources` | Placeholder for future asset or download steps |
@@ -368,7 +369,7 @@ Do not commit secrets. `.env` is gitignored.
 ├── .env.example
 ├── pyproject.toml
 ├── pdm.lock
-├── .github/workflows/      # CI (Postgres + migrations + pytest + ruff)
+├── .github/workflows/      # CI (Postgres + migrations + pytest + coverage + ruff)
 ├── app/                    # FastAPI (API routes, services, db session, schemas)
 ├── worker/                 # ARQ worker (tasks, pipeline scaffold)
 ├── db/

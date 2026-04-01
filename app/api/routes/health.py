@@ -18,8 +18,8 @@ router = APIRouter(tags=["health"])
 
 
 def _include_dependency_health_details() -> bool:
-    """Omit DSN preview and errors in production responses."""
-    return get_settings().environment.lower() not in ("production", "prod")
+    """Omit DSN preview and errors in production, prod, and staging responses."""
+    return not get_settings().hides_health_openapi_details()
 
 
 @router.get("/health", response_model=HealthResponse)

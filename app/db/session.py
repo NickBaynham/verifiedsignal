@@ -47,6 +47,11 @@ def get_session_factory() -> sessionmaker[Session]:
 
 
 def get_db() -> Generator[Session, None, None]:
+    """
+    Request-scoped SQLAlchemy session. Yields an open session; closes after the response.
+
+    Callers must **commit** or **rollback** explicitly; this generator does not auto-commit.
+    """
     SessionLocal = get_session_factory()
     db = SessionLocal()
     try:

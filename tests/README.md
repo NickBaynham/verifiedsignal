@@ -4,7 +4,7 @@ Pytest is organized by **markers** (see `pyproject.toml`):
 
 | Marker | Scope | Requirements |
 |--------|--------|----------------|
-| **`unit`** | CLI, package metadata, migrations on disk, worker pipeline sim, event hub, document queue, **HTTP scorer parsing** (`test_score_http_remote.py`), **SSE tenancy filter** (`test_sse_tenancy.py`) | None |
+| **`unit`** | CLI, package metadata, migrations on disk, worker pipeline sim, event hub, document queue, **HTTP scorer parsing** (`test_score_http_remote.py`), **reference HTTP scorer** (`test_reference_http_scorer_app.py`), **SSE tenancy filter** (`test_sse_tenancy.py`) | None |
 | **`integration`** | Postgres schema, **document intake** (`test_document_intake.py`), **search pipeline** (`test_search_pipeline.py`), **pipeline + analytics HTTP** (`test_pipeline_and_analytics_api.py`), **async HTTP scorer** (`test_score_http_worker.py`), **search/SSE auth defaults** (`test_auth_search_sse.py`), or FastAPI routes (stubbed DB health + fake queue/storage/OpenSearch via `api_client`) | Intake + schema: **`DATABASE_URL`** + migrations **001–005**. `api_client` tests: none (fixture stubs infra). |
 | **`e2e`** | `docker compose config` + ASGI smoke (`test_api_http`) | **`docker`** on `PATH` for compose test only |
 | **`api`** | ASGI smoke (`TestClient`, multi-route) | None |
@@ -12,11 +12,12 @@ Pytest is organized by **markers** (see `pyproject.toml`):
 ## Commands
 
 ```bash
-make test                 # full pytest (skips only what markers/env exclude)
+make test                 # full pytest (skips only what markers/env exclude); no coverage gate
 make test-unit
 make test-integration
 make test-e2e
 make test-api
+make ci-local             # like CI: Ruff + pytest with --cov=app/services (needs Docker)
 ```
 
 ## Integration tests and Postgres
@@ -37,4 +38,4 @@ Defined in **`tests/conftest.py`**. Patches **`app.api.routes.health.database_he
 
 ## CI
 
-GitHub Actions runs **`pytest`** on all markers with **`--cov=app/services`**, **`--cov-report=term-missing`**, and **`--cov-report=xml`**. Coverage enforces a **minimum line coverage** on **`app/services`** (**`fail_under`** in **`pyproject.toml`** `[tool.coverage.report]`). Ruff checks **`src`**, **`tests`**, **`app`**, **`worker`**, and **`scripts`**. The workflow uploads **`coverage.xml`** as an artifact when present. Locally, **`make ci-local`** approximates the same flow (see the root **`README.md`**).
+GitHub Actions runs **`pytest`** on all markers with **`--cov=app/services`**, **`--cov-report=term-missing`**, and **`--cov-report=xml`**. Coverage enforces a **minimum line coverage** on **`app/services`** (**`fail_under`** in **`pyproject.toml`** `[tool.coverage.report]`). Ruff checks **`src`**, **`tests`**, **`app`**, **`worker`**, and **`scripts`**. The Python job runs **`pip-audit`** on an exported requirements file; the web job runs **`npm audit`**. The workflow uploads **`coverage.xml`** as an artifact when present. Locally, **`make ci-local`** approximates the same flow (see the root **`README.md`**).

@@ -64,11 +64,11 @@ help:
 	@echo "  make migrate-003    Apply only 003 (body_text column; when 001+002 already applied)"
 	@echo "  make migrate-004    Apply only 004 (extract_artifact_key; when 001–003 already applied)"
 	@echo "  make migrate-005    Apply only 005 (user_metadata; when 001–004 already applied)"
-	@echo "  make migrate-reset  Drop app schema + re-apply 001+002 (dev only; needs MIGRATE_RESET_OK=1)"
+	@echo "  make migrate-reset  Drop app schema + re-apply 001–005 (dev only; needs MIGRATE_RESET_OK=1)"
 	@echo "  make api-local      Run FastAPI on host with 127.0.0.1 URLs (LOCAL_API_PG_PORT, LOCAL_API_PORT=8000)"
 	@echo "  make api-local-prod Same as api-local without --reload"
 	@echo "  make api-local-restart  Kill process on LOCAL_API_PORT then run api-local (same vars)"
-	@echo "  make ci-local       Ephemeral Postgres:16 + migrations + Ruff + pytest; removes container after (even on failure)"
+	@echo "  make ci-local       Ephemeral Postgres:16 + migrations 001–005 + Ruff + pytest --cov=app/services; removes container after (even on failure)"
 	@echo "  make ci-local-stop  Remove the ci-local Postgres container (manual cleanup)"
 
 setup: config
@@ -99,10 +99,10 @@ test-api:
 	$(PDM) run python -m pytest -m api
 
 lint:
-	$(PDM) run python -m ruff check src tests app worker
+	$(PDM) run python -m ruff check src tests app worker scripts
 
 format:
-	$(PDM) run python -m ruff format src tests app worker
+	$(PDM) run python -m ruff format src tests app worker scripts
 
 clean:
 	rm -rf .pytest_cache .ruff_cache .pdm-build dist build

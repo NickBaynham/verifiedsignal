@@ -1,4 +1,11 @@
-"""HTTP GET with size limits (used by the URL ingest worker)."""
+"""HTTP GET with size limits (used by the URL ingest worker).
+
+Security: the intake API validates the *initial* URL (scheme, host resolution, private IP block).
+When ``URL_FETCH_FOLLOW_REDIRECTS`` is true, ``httpx`` may follow redirects to hosts that were
+**not** re-validated — a known SSRF class (redirect to metadata IP, loopback, etc.). For strict
+network boundaries set ``URL_FETCH_FOLLOW_REDIRECTS=false`` or run URL ingest only for trusted
+catalogs; long-term hardening is per-hop validation or a same-connection DNS re-check.
+"""
 
 from __future__ import annotations
 

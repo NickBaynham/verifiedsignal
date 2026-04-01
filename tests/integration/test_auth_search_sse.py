@@ -18,6 +18,7 @@ def unauth_api_client(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setenv("USE_FAKE_QUEUE", "true")
     monkeypatch.setenv("USE_FAKE_STORAGE", "true")
     monkeypatch.setenv("USE_FAKE_OPENSEARCH", "true")
+    monkeypatch.setenv("RATE_LIMIT_ENABLED", "false")
     reset_settings_cache()
 
     def fake_db():

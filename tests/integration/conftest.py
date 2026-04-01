@@ -35,6 +35,8 @@ def intake_api_client(monkeypatch, database_url: str):
     monkeypatch.setenv("USE_FAKE_EVENT_HUB", "true")
     monkeypatch.setenv("USE_FAKE_STORAGE", "true")
     monkeypatch.setenv("USE_FAKE_OPENSEARCH", "true")
+    monkeypatch.setenv("RATE_LIMIT_ENABLED", "false")
+    monkeypatch.setenv("VERIFIEDSIGNAL_ALLOW_DEFAULT_COLLECTION_FALLBACK", "true")
 
     from app.auth.dependencies import (
         get_current_user,

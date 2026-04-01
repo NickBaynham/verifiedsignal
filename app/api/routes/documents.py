@@ -6,7 +6,17 @@ import uuid
 from typing import Annotated
 from urllib.parse import quote
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Response, UploadFile
+from fastapi import (
+    APIRouter,
+    Depends,
+    File,
+    Form,
+    HTTPException,
+    Query,
+    Request,
+    Response,
+    UploadFile,
+)
 from fastapi.responses import RedirectResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -15,6 +25,7 @@ from app.api.deps import get_db, get_object_storage_dep
 from app.auth.dependencies import get_current_user
 from app.core.config import get_settings
 from app.db.models import DocumentScore
+from app.rate_limit import limiter
 from app.schemas.document import (
     CanonicalScoreOut,
     DocumentDetailOut,
@@ -60,7 +71,9 @@ def list_documents(
 
 
 @router.post("/from-url", response_model=UrlIntakeResponse, status_code=202)
+@limiter.limit(lambda: get_settings().rate_limit_documents_intake)
 def ingest_document_from_url(
+    request: Request,
     body: UrlIntakeRequest,
     db: Session = Depends(get_db),
     _user_id: str = Depends(get_current_user),
@@ -71,6 +84,7 @@ def ingest_document_from_url(
     Poll `GET /documents/{id}` for `queued` / `failed` after the fetch job completes.
     """
     _ = _user_id
+    _ = request  # required by slowapi rate limit; marks dependency for linters
     try:
         payload = run_url_intake_submit(
             db,
@@ -250,7 +264,9 @@ def remove_document(
 
 
 @router.post("", response_model=IntakeResponse)
+@limiter.limit(lambda: get_settings().rate_limit_documents_intake)
 def upload_document(
+    request: Request,
     file: UploadFile = File(..., description="Raw file bytes for intake"),
     collection_id: str | None = Form(
         default=None,
@@ -276,6 +292,7 @@ def upload_document(
 
     Sync handler so `asyncio.run` inside storage/queue helpers is safe (runs on a worker thread).
     """
+    _ = request
     raw = file.file.read()
     try:
         um = validate_user_metadata(parse_metadata_json_string(metadata))

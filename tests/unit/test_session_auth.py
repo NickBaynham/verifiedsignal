@@ -13,6 +13,7 @@ from jose import jwt
 from supabase_auth.errors import AuthApiError, AuthInvalidCredentialsError
 
 _SUPABASE_ENV = {
+    "RATE_LIMIT_ENABLED": "false",
     "SUPABASE_URL": "http://localhost:54321",
     "SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.e30.test-anon-key",
     "SUPABASE_SERVICE_ROLE_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.e30.test-service-key",

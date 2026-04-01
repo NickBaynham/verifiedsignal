@@ -7,7 +7,7 @@ from functools import lru_cache
 from urllib.parse import urlparse, urlunparse
 from uuid import UUID
 
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -21,6 +21,40 @@ class Settings(BaseSettings):
     app_name: str = "verifiedsignal-api"
     api_v1_prefix: str = "/api/v1"
     environment: str = "development"
+
+    # When ENVIRONMENT is production|prod|staging, interactive OpenAPI/Swagger is off unless true.
+    expose_openapi_docs: bool = Field(default=False, validation_alias="EXPOSE_OPENAPI_DOCS")
+
+    # Per-IP limits (slowapi; in-memory — one counter set per API process).
+    rate_limit_enabled: bool = Field(default=True, validation_alias="RATE_LIMIT_ENABLED")
+    rate_limit_auth_signup: str = Field(
+        default="5/minute",
+        validation_alias="RATE_LIMIT_AUTH_SIGNUP",
+    )
+    rate_limit_auth_login: str = Field(
+        default="10/minute",
+        validation_alias="RATE_LIMIT_AUTH_LOGIN",
+    )
+    rate_limit_auth_refresh: str = Field(
+        default="60/minute",
+        validation_alias="RATE_LIMIT_AUTH_REFRESH",
+    )
+    rate_limit_auth_reset: str = Field(
+        default="3/minute",
+        validation_alias="RATE_LIMIT_AUTH_RESET",
+    )
+    rate_limit_auth_sync_identity: str = Field(
+        default="30/minute",
+        validation_alias="RATE_LIMIT_AUTH_SYNC_IDENTITY",
+    )
+    rate_limit_auth_logout: str = Field(
+        default="30/minute",
+        validation_alias="RATE_LIMIT_AUTH_LOGOUT",
+    )
+    rate_limit_documents_intake: str = Field(
+        default="60/minute",
+        validation_alias="RATE_LIMIT_DOCUMENTS_INTAKE",
+    )
 
     database_url: str = Field(
         default="postgresql://verifiedsignal:verifiedsignal@localhost:5432/verifiedsignal",
@@ -74,13 +108,14 @@ class Settings(BaseSettings):
         default=True,
         validation_alias="VERIFIEDSIGNAL_AUTO_PROVISION_IDENTITY",
     )
-    # When false, JWTs without a users row do not get the seeded default inbox (prod multi-tenant).
+    # Default false (multi-tenant safe). Set true in local .env for seeded default inbox fallback.
     allow_default_collection_fallback: bool = Field(
-        default=True,
+        default=False,
         validation_alias="VERIFIEDSIGNAL_ALLOW_DEFAULT_COLLECTION_FALLBACK",
         description=(
             "If no Postgres user row matches the JWT and auto-provision is off, fall back to "
-            "VERIFIEDSIGNAL_DEFAULT_COLLECTION_ID when set (local dev). Disable in production."
+            "VERIFIEDSIGNAL_DEFAULT_COLLECTION_ID when set. Enable for local dev; keep false in "
+            "production unless you accept shared default collection access."
         ),
     )
 
@@ -208,6 +243,23 @@ class Settings(BaseSettings):
     jwt_algorithm: str = Field(default="HS256", validation_alias="JWT_ALGORITHM")
     jwt_audience: str = Field(default="authenticated", validation_alias="JWT_AUDIENCE")
 
+    @model_validator(mode="after")
+    def jwt_algorithm_hmac_when_no_jwks(self) -> Settings:
+        """
+        When verifying with SUPABASE_JWT_SECRET, only HMAC algs are used (see jwt_verify).
+        If SUPABASE_JWKS_URL is set, RS256 is enforced in code and this field is ignored for verify.
+        """
+        if self.supabase_jwks_url.strip():
+            return self
+        alg = (self.jwt_algorithm or "HS256").strip().upper()
+        if alg not in ("HS256", "HS384", "HS512"):
+            raise ValueError(
+                "JWT_ALGORITHM must be HS256, HS384, or HS512 when SUPABASE_JWKS_URL is unset"
+            )
+        if alg != self.jwt_algorithm:
+            return self.model_copy(update={"jwt_algorithm": alg})
+        return self
+
     # Comma-separated browser origins for credentialed requests (refresh cookie).
     cors_origins: str = Field(
         default="http://localhost:5173,http://127.0.0.1:5173,http://localhost:3000,http://127.0.0.1:3000",
@@ -227,6 +279,14 @@ class Settings(BaseSettings):
             and self.supabase_service_role_key.strip()
             and self.supabase_anon_key.strip()
         )
+
+    def hides_health_openapi_details(self) -> bool:
+        """Hide /health internals and API docs (treat like production)."""
+        return self.environment.strip().lower() in ("production", "prod", "staging")
+
+    def strict_production_lifespan_warnings(self) -> bool:
+        """Startup warnings for fake infra / risky tenancy (production|prod only)."""
+        return self.environment.strip().lower() in ("production", "prod")
 
 
 @lru_cache
@@ -258,6 +318,7 @@ def preview_database_url(url: str) -> str:
         path = parsed.path if parsed.path else "/"
         return urlunparse((parsed.scheme, netloc, path, parsed.params, "", ""))
     except Exception:
+        # Defensive: never fail callers; malformed or exotic URLs should not break /health.
         return "<could not parse DATABASE_URL>"
 
 

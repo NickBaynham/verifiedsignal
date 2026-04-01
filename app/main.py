@@ -8,6 +8,8 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, RedirectResponse
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
 from sqlalchemy.exc import SQLAlchemyError
 
 from app.api.routes import (
@@ -21,16 +23,12 @@ from app.api.routes import (
     users_api,
 )
 from app.core.config import get_settings
+from app.rate_limit import limiter, sync_limiter_from_settings
 from app.services.event_service import close_event_hub
 from app.services.queue_backend import close_job_queue
 from app.services.storage_service import reset_object_storage
 
 logger = logging.getLogger(__name__)
-
-
-def _production_like_environment() -> bool:
-    env = get_settings().environment.lower()
-    return env in ("production", "prod")
 
 
 def _register_exception_handlers(application: FastAPI) -> None:
@@ -40,7 +38,7 @@ def _register_exception_handlers(application: FastAPI) -> None:
         exc: SQLAlchemyError,
     ) -> JSONResponse:
         logger.error("SQLAlchemy error", exc_info=exc)
-        if _production_like_environment():
+        if get_settings().hides_health_openapi_details():
             return JSONResponse(
                 status_code=500,
                 content={"detail": "Internal server error"},
@@ -62,6 +60,23 @@ def _register_exception_handlers(application: FastAPI) -> None:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     _ = app
+    settings = get_settings()
+    if settings.strict_production_lifespan_warnings():
+        if settings.allow_default_collection_fallback:
+            logger.warning(
+                "Production: VERIFIEDSIGNAL_ALLOW_DEFAULT_COLLECTION_FALLBACK is enabled; "
+                "JWTs without a Postgres user may access the default collection — disable for "
+                "strict multi-tenant isolation."
+            )
+        if settings.use_fake_queue or settings.use_fake_storage or settings.use_fake_opensearch:
+            logger.warning(
+                "Production: USE_FAKE_QUEUE / USE_FAKE_STORAGE / USE_FAKE_OPENSEARCH enabled — "
+                "not suitable for real workloads."
+            )
+        if settings.use_fake_event_hub:
+            logger.warning(
+                "Production: USE_FAKE_EVENT_HUB enabled — SSE will not fan out across API replicas."
+            )
     yield
     await close_job_queue()
     await close_event_hub()
@@ -70,6 +85,8 @@ async def lifespan(app: FastAPI):
 
 def create_app() -> FastAPI:
     settings = get_settings()
+    sync_limiter_from_settings(settings)
+    docs_enabled = (not settings.hides_health_openapi_details()) or settings.expose_openapi_docs
     application = FastAPI(
         title=settings.app_name,
         description=(
@@ -81,16 +98,20 @@ def create_app() -> FastAPI:
         ),
         version="0.1.0",
         lifespan=lifespan,
-        docs_url="/",
-        redoc_url="/redoc",
-        openapi_url="/openapi.json",
+        docs_url="/" if docs_enabled else None,
+        redoc_url="/redoc" if docs_enabled else None,
+        openapi_url="/openapi.json" if docs_enabled else None,
     )
+    application.state.limiter = limiter
+    application.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
     _register_exception_handlers(application)
 
-    @application.get("/docs", include_in_schema=False)
-    async def redirect_legacy_docs() -> RedirectResponse:
-        """Old default path; interactive docs live at `/`."""
-        return RedirectResponse(url="/", status_code=307)
+    if docs_enabled:
+
+        @application.get("/docs", include_in_schema=False)
+        async def redirect_legacy_docs() -> RedirectResponse:
+            """Old default path; interactive docs live at `/`."""
+            return RedirectResponse(url="/", status_code=307)
 
     application.add_middleware(
         CORSMiddleware,

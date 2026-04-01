@@ -21,7 +21,7 @@ Implementation: `app/services/identity_service.py`, wired from `app/auth/depende
 
 If **no** `users` row matches the JWT:
 
-- With **`VERIFIEDSIGNAL_ALLOW_DEFAULT_COLLECTION_FALLBACK=true`** (default) and **`VERIFIEDSIGNAL_DEFAULT_COLLECTION_ID`** set, ACL resolution returns only that seeded collection (migration **002**).
+- With **`VERIFIEDSIGNAL_ALLOW_DEFAULT_COLLECTION_FALLBACK=true`** (set in **`.env.example`** for local dev; default in code is **false**) and **`VERIFIEDSIGNAL_DEFAULT_COLLECTION_ID`** set, ACL resolution returns only that seeded collection (migration **002**).
 - With fallback **disabled**, ACL returns **no** collections until a user row exists — intended for **production / multi-tenant** deployments.
 
 Intake without `collection_id` also requires fallback (or an explicit default collection id); when fallback is **false**, clients must send **`collection_id`**.

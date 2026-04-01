@@ -29,6 +29,7 @@ def test_resolve_collection_id_explicit_uuid_string():
 def test_resolve_collection_id_uses_env_default(monkeypatch):
     cid = uuid.uuid4()
     monkeypatch.setenv("VERIFIEDSIGNAL_DEFAULT_COLLECTION_ID", str(cid))
+    monkeypatch.setenv("VERIFIEDSIGNAL_ALLOW_DEFAULT_COLLECTION_FALLBACK", "true")
     reset_settings_cache()
     from app.core.config import get_settings
 
@@ -37,6 +38,7 @@ def test_resolve_collection_id_uses_env_default(monkeypatch):
         assert resolve_collection_id(None, s) == cid
         assert resolve_collection_id("", s) == cid
     finally:
+        monkeypatch.delenv("VERIFIEDSIGNAL_ALLOW_DEFAULT_COLLECTION_FALLBACK", raising=False)
         reset_settings_cache()
 
 

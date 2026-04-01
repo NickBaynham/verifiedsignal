@@ -41,6 +41,11 @@ jobs:
       - name: Install dependencies
         run: pdm install
 
+      - name: Dependency audit (pip-audit)
+        run: |
+          pdm export -f requirements --without-hashes -o /tmp/requirements-audit.txt
+          pdm run pip-audit -r /tmp/requirements-audit.txt
+
       - name: Wait for Postgres and apply migrations
         run: |
           set -euo pipefail
@@ -103,6 +108,7 @@ jobs:
       - name: Install and test web
         run: |
           npm ci
+          npm audit --audit-level=high
           npx playwright install chromium
           npm run build
           npm run test:unit

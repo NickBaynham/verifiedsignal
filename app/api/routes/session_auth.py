@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Cookie, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Cookie, Depends, HTTPException, Request, Response, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import JWTError
 from sqlalchemy.orm import Session
@@ -24,6 +24,7 @@ from app.api.deps import get_db
 from app.auth.jwt_verify import decode_access_token_claims
 from app.auth.supabase_service import get_supabase_service_client
 from app.core.config import Settings, get_settings
+from app.rate_limit import limiter
 from app.schemas.auth_api import (
     AccessTokenResponse,
     EmailPasswordBody,
@@ -60,7 +61,9 @@ def _auth_error_detail(exc: AuthApiError) -> str:
 
 
 @router.post("/signup", response_model=SignupResponse)
+@limiter.limit(lambda: get_settings().rate_limit_auth_signup)
 def auth_signup(
+    request: Request,
     body: EmailPasswordBody,
     settings: Settings = Depends(get_settings),
 ) -> SignupResponse:
@@ -79,7 +82,9 @@ def auth_signup(
 
 
 @router.post("/sync-identity", response_model=SyncIdentityOut)
+@limiter.limit(lambda: get_settings().rate_limit_auth_sync_identity)
 def auth_sync_identity(
+    request: Request,
     credentials: HTTPAuthorizationCredentials = Depends(sync_bearer),
     db: Session = Depends(get_db),
     settings: Settings = Depends(get_settings),
@@ -118,7 +123,9 @@ def auth_sync_identity(
 
 
 @router.post("/login", response_model=AccessTokenResponse)
+@limiter.limit(lambda: get_settings().rate_limit_auth_login)
 def auth_login(
+    request: Request,
     body: EmailPasswordBody,
     response: Response,
     settings: Settings = Depends(get_settings),
@@ -155,7 +162,9 @@ def auth_login(
 
 
 @router.post("/refresh", response_model=RefreshResponse)
+@limiter.limit(lambda: get_settings().rate_limit_auth_refresh)
 def auth_refresh(
+    request: Request,
     response: Response,
     settings: Settings = Depends(get_settings),
     refresh_token: Annotated[str | None, Cookie(alias=REFRESH_COOKIE)] = None,
@@ -184,7 +193,9 @@ def auth_refresh(
 
 
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
+@limiter.limit(lambda: get_settings().rate_limit_auth_logout)
 def auth_logout(
+    request: Request,
     response: Response,
     settings: Settings = Depends(get_settings),
     refresh_token: Annotated[str | None, Cookie(alias=REFRESH_COOKIE)] = None,
@@ -208,7 +219,9 @@ def auth_logout(
 
 
 @router.post("/reset-password", status_code=status.HTTP_200_OK)
+@limiter.limit(lambda: get_settings().rate_limit_auth_reset)
 def auth_reset_password(
+    request: Request,
     body: ResetPasswordBody,
     settings: Settings = Depends(get_settings),
 ) -> dict[str, str]:

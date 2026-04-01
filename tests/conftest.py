@@ -20,6 +20,7 @@ def api_client(monkeypatch):
     monkeypatch.setenv("USE_FAKE_EVENT_HUB", "true")
     monkeypatch.setenv("USE_FAKE_STORAGE", "true")
     monkeypatch.setenv("USE_FAKE_OPENSEARCH", "true")
+    monkeypatch.setenv("RATE_LIMIT_ENABLED", "false")
 
     from app.core.config import reset_settings_cache
     from app.db.session import DatabaseHealthResult, reset_engine
@@ -95,7 +96,7 @@ def jwt_integration_client(monkeypatch: pytest.MonkeyPatch):
     """
     FastAPI TestClient with real Postgres, no `get_current_user` override — uses signed JWTs.
 
-    Skips when DATABASE_URL is unset. Requires migrations 001–003 applied.
+    Skips when DATABASE_URL is unset. Requires migrations 001–005 applied (same as CI).
     Yields (client, make_token) where make_token(sub=..., email=...) returns a Bearer string value.
     """
     database_url = os.environ.get("DATABASE_URL")
@@ -116,6 +117,7 @@ def jwt_integration_client(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setenv("JWT_AUDIENCE", "authenticated")
     monkeypatch.setenv("VERIFIEDSIGNAL_AUTO_PROVISION_IDENTITY", "true")
     monkeypatch.setenv("VERIFIEDSIGNAL_ALLOW_DEFAULT_COLLECTION_FALLBACK", "true")
+    monkeypatch.setenv("RATE_LIMIT_ENABLED", "false")
 
     from app.core.config import reset_settings_cache
     from app.db.session import reset_engine

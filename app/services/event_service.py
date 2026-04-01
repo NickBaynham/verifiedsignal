@@ -6,6 +6,7 @@ import asyncio
 import json
 import logging
 from abc import ABC, abstractmethod
+from contextlib import suppress
 from datetime import UTC, datetime
 from typing import Any
 
@@ -70,10 +71,8 @@ class InMemoryEventHub(EventHubBackend):
         async with self._lock:
             targets = list(self._subscribers)
         for q in targets:
-            try:
+            with suppress(asyncio.QueueFull):
                 q.put_nowait(msg)
-            except asyncio.QueueFull:
-                continue
 
 
 class RedisEventHub(EventHubBackend):
@@ -113,27 +112,19 @@ class RedisEventHub(EventHubBackend):
                         continue
                     if not isinstance(data, str):
                         data = str(data)
-                    try:
+                    with suppress(asyncio.QueueFull):
                         q.put_nowait(data)
-                    except asyncio.QueueFull:
-                        pass
             except asyncio.CancelledError:
                 raise
             except Exception:
                 log.exception("redis_sse_listener_failed channel=%s", self._channel)
             finally:
-                try:
+                with suppress(Exception):
                     await pubsub.unsubscribe(self._channel)
-                except Exception:
-                    pass
-                try:
+                with suppress(Exception):
                     await pubsub.aclose()
-                except Exception:
-                    pass
-                try:
+                with suppress(Exception):
                     await client.aclose()
-                except Exception:
-                    pass
 
         task = asyncio.create_task(pump())
         async with self._listener_lock:
@@ -145,10 +136,8 @@ class RedisEventHub(EventHubBackend):
             task = self._listener_tasks.pop(q, None)
         if task is not None and not task.done():
             task.cancel()
-            try:
+            with suppress(asyncio.CancelledError):
                 await task
-            except asyncio.CancelledError:
-                pass
 
     async def publish(self, event_type: str, payload: dict[str, Any]) -> None:
         msg = _build_message(event_type, payload)
@@ -198,11 +187,9 @@ def reset_event_hub() -> None:
         return
     hub = _hub
     _hub = None
-    try:
+    with suppress(RuntimeError):
+        # Nested event loop (e.g. test setup): aclose may not run; reference is dropped anyway.
         asyncio.run(hub.aclose())
-    except RuntimeError:
-        # Nested loop (e.g. rare test setup); drop reference only.
-        pass
 
 
 async def close_event_hub() -> None:
