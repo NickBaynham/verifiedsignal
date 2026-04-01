@@ -1,5 +1,7 @@
 # HTTP remote document scorer
 
+**Implementing a remote scorer?** See **[`external-scorer-implementation-guide.md`](external-scorer-implementation-guide.md)** for the HTTP contract, success/error semantics, and checklists.
+
 When **`ENQUEUE_SCORE_AFTER_PIPELINE=true`**, the pipeline can enqueue the ARQ job **`score_document`**. That job writes an extra **`document_scores`** row using either:
 
 - **`SCORE_ASYNC_BACKEND=stub`** — non-canonical placeholder (**`verifiedsignal_stub`**), or  
