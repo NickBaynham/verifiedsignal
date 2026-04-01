@@ -29,7 +29,7 @@ jobs:
       DATABASE_URL: postgresql://verifiedsignal:verifiedsignal@127.0.0.1:5432/verifiedsignal
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - uses: actions/setup-python@v5
         with:
@@ -97,7 +97,7 @@ jobs:
       run:
         working-directory: apps/web
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - uses: actions/setup-node@v4
         with:
