@@ -216,5 +216,6 @@ ci-local:
 	trap 'docker rm -f $(CI_LOCAL_PG_CONTAINER) 2>/dev/null || true' EXIT; \
 	$(MAKE) ci-local-postgres; \
 	$(MAKE) ci-local-migrate-sql; \
-	env DATABASE_URL='$(CI_LOCAL_PG_URL)' $(PDM) run python -m ruff check src tests app worker; \
-	env DATABASE_URL='$(CI_LOCAL_PG_URL)' $(PDM) run python -m pytest -v --tb=short
+	env DATABASE_URL='$(CI_LOCAL_PG_URL)' $(PDM) run python -m ruff check src tests app worker scripts; \
+	env DATABASE_URL='$(CI_LOCAL_PG_URL)' $(PDM) run python -m pytest -v --tb=short \
+		--cov=app/services --cov-report=term-missing --cov-report=xml

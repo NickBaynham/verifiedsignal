@@ -21,6 +21,7 @@ from app.api.routes import (
     users_api,
 )
 from app.core.config import get_settings
+from app.services.event_service import close_event_hub
 from app.services.queue_backend import close_job_queue
 from app.services.storage_service import reset_object_storage
 
@@ -63,6 +64,7 @@ async def lifespan(app: FastAPI):
     _ = app
     yield
     await close_job_queue()
+    await close_event_hub()
     reset_object_storage()
 
 
@@ -73,7 +75,8 @@ def create_app() -> FastAPI:
         description=(
             "VerifiedSignal HTTP API: session auth under **`/auth`** (Supabase-backed, including "
             "**`/auth/sync-identity`**); versioned resources under **`/api/v1`** "
-            "(health, documents incl. signed original download, collections, users, search, events). "
+            "(health, documents incl. signed original download, collections, users, search, "
+            "SSE via Redis pub/sub). "
             "Bearer JWTs can auto-provision Postgres tenancy (users, org, inbox)."
         ),
         version="0.1.0",

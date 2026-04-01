@@ -86,7 +86,42 @@ Stub rows use **`kind: stub`**, **`job_status: completed`**, and **`note`**.
 
 **Dependencies:** Define labels (e.g. synthetic vs human), choose priors, and decide whether HTTP scorers return **calibrated** probabilities or raw scores that we map to likelihoods. This is a design + incremental PR sequence, not a drop-in one-liner.
 
+## Reference HTTP scorer (copy-paste local test)
+
+The repo ships a **tiny FastAPI** service that implements this contract so you can run **`ENQUEUE_SCORE_AFTER_PIPELINE=true`**, **`SCORE_ASYNC_BACKEND=http`**, and **`SCORE_HTTP_URL`** against a real process (no external API keys).
+
+**1. Start the scorer** (from the repository root, with PDM dependencies installed):
+
+```bash
+pdm run reference-http-scorer
+```
+
+Or without PDM (same interpreter you use for the app):
+
+```bash
+bash scripts/reference_http_scorer/run.sh
+```
+
+Default listen address: **`http://127.0.0.1:9100`**. **`GET /health`** returns **`{"status":"ok"}`**. **`POST /score`** accepts the request JSON above and returns **`schema_version: 1`** plus optional score fields and **`metadata`**.
+
+**2. Point the worker at it** (e.g. in `.env` next to your API/worker):
+
+```bash
+ENQUEUE_SCORE_AFTER_PIPELINE=true
+SCORE_ASYNC_BACKEND=http
+SCORE_HTTP_URL=http://127.0.0.1:9100/score
+# Optional, must match if set:
+# SCORE_HTTP_BEARER_TOKEN=your-secret
+# REFERENCE_SCORER_BEARER_TOKEN=your-secret   # on the scorer process only
+```
+
+If **`REFERENCE_SCORER_BEARER_TOKEN`** is set in the scorer’s environment, requests must send **`Authorization: Bearer <same value>`** (same token you put in **`SCORE_HTTP_BEARER_TOKEN`** on the worker).
+
+**3. Run API + Redis + worker** as you normally do (`pdm run api`, `pdm run worker`, etc.). After a document finishes the pipeline, the async job should insert a **`verifiedsignal_http`** row.
+
+Implementation: **`scripts/reference_http_scorer/app.py`**. Unit smoke tests: **`tests/unit/test_reference_http_scorer_app.py`**.
+
 ## Tests
 
-- **Unit:** `tests/unit/test_score_http_remote.py`  
+- **Unit:** `tests/unit/test_score_http_remote.py`, `tests/unit/test_reference_http_scorer_app.py`  
 - **Integration (Postgres + mocked HTTP):** `tests/integration/test_score_http_worker.py`

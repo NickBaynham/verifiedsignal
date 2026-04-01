@@ -108,6 +108,8 @@ services:
       REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
       VERIFIEDSIGNAL_ARQ_QUEUE: ${VERIFIEDSIGNAL_ARQ_QUEUE:-verifiedsignal:jobs}
       USE_FAKE_QUEUE: ${USE_FAKE_QUEUE:-false}
+      USE_FAKE_EVENT_HUB: ${USE_FAKE_EVENT_HUB:-false}
+      EVENT_PUBSUB_CHANNEL: ${EVENT_PUBSUB_CHANNEL:-verifiedsignal:sse}
       S3_ENDPOINT_URL: ${S3_ENDPOINT_URL:-http://minio:9000}
       AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-minioadmin}
       AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-minioadmin}

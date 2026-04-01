@@ -10,7 +10,11 @@ from app.services.event_service import get_event_hub, reset_event_hub
 
 
 @pytest.mark.unit
-def test_event_hub_publish_delivers():
+def test_event_hub_publish_delivers(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setenv("USE_FAKE_EVENT_HUB", "true")
+    from app.core.config import reset_settings_cache
+
+    reset_settings_cache()
     reset_event_hub()
 
     async def run():
@@ -25,3 +29,4 @@ def test_event_hub_publish_delivers():
 
     asyncio.run(run())
     reset_event_hub()
+    reset_settings_cache()

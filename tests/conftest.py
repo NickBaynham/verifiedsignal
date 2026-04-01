@@ -17,6 +17,7 @@ def api_client(monkeypatch):
     Cleans ARQ pool / engine / event hub after each test.
     """
     monkeypatch.setenv("USE_FAKE_QUEUE", "true")
+    monkeypatch.setenv("USE_FAKE_EVENT_HUB", "true")
     monkeypatch.setenv("USE_FAKE_STORAGE", "true")
     monkeypatch.setenv("USE_FAKE_OPENSEARCH", "true")
 
@@ -105,6 +106,7 @@ def jwt_integration_client(monkeypatch: pytest.MonkeyPatch):
 
     monkeypatch.setenv("DATABASE_URL", database_url)
     monkeypatch.setenv("USE_FAKE_QUEUE", "true")
+    monkeypatch.setenv("USE_FAKE_EVENT_HUB", "true")
     monkeypatch.setenv("USE_FAKE_STORAGE", "true")
     monkeypatch.setenv(
         "SUPABASE_JWT_SECRET",

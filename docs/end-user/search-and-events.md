@@ -74,7 +74,7 @@ Returns a **text/event-stream** (SSE) connection. Your client should use **`Even
 
 Missing or invalid tokens → **401**.
 
-- **Legacy:** **`VERIFIEDSIGNAL_REQUIRE_AUTH_SSE=false`** allows anonymous connections (all in-process events; not suitable for multi-tenant production).
+- **Legacy:** **`VERIFIEDSIGNAL_REQUIRE_AUTH_SSE=false`** allows anonymous connections (all events on the shared channel; not suitable for multi-tenant production).
 
 ### Tenancy
 
@@ -89,7 +89,7 @@ When auth is enabled, the stream only delivers events whose **`payload.auth_sub`
    - **`ts`** — UTC timestamp
    - **`environment`** — server environment label
 
-Events are broadcast **in memory** on a single API instance. Multi-server deployments will need a shared bus (for example Redis) for all users to see the same events—your operator’s roadmap.
+Events are published to **Redis pub/sub** (channel from **`EVENT_PUBSUB_CHANNEL`**, default **`verifiedsignal:sse`**) using **`REDIS_URL`**, the same broker as ARQ. Every API replica subscribes to that channel, so **`EventSource`** clients attached to any instance receive the same JSON lines (**`connected`**, then tenant-filtered events). For tests or single-process dev without Redis, set **`USE_FAKE_EVENT_HUB=true`** to use an in-process hub instead.
 
 ### Using SSE in the browser
 

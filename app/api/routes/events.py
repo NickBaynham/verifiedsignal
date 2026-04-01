@@ -1,4 +1,4 @@
-"""Server-Sent Events stream for pipeline / system notifications."""
+"""SSE stream for pipeline / system notifications (Redis pub/sub unless USE_FAKE_EVENT_HUB)."""
 
 from __future__ import annotations
 

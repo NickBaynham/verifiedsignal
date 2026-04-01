@@ -124,7 +124,8 @@ def download_document_original(
         Query(
             description=(
                 "When true (default), return 302 to a presigned GET URL if the storage backend "
-                "supports signing. Otherwise stream bytes through this API (still requires Bearer auth)."
+                "supports signing. Otherwise stream bytes through this API "
+                "(still requires Bearer auth)."
             ),
         ),
     ] = True,
@@ -137,7 +138,7 @@ def download_document_original(
     **redirect=false**.
     """
     settings = get_settings()
-    out = get_document_for_user(db, document_id=document_id, auth_sub=user_id)
+    out = get_document_for_user(db, document_id=document_id, auth_sub=_user_id)
     if out is None:
         raise HTTPException(status_code=404, detail="Document not found")
     doc, _sources = out

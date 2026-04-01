@@ -44,6 +44,22 @@ class Settings(BaseSettings):
     # When true, skip Redis/ARQ and use in-process fake queue (tests + local without Redis).
     use_fake_queue: bool = Field(default=False, validation_alias="USE_FAKE_QUEUE")
 
+    # When true, SSE uses in-process fan-out instead of Redis pub/sub (tests; single-process dev).
+    use_fake_event_hub: bool = Field(
+        default=False,
+        validation_alias="USE_FAKE_EVENT_HUB",
+        description=(
+            "In-memory EventHub for SSE. Set true in tests. When false, GET /events/stream uses "
+            "Redis pub/sub at REDIS_URL (same broker as ARQ) so multiple API replicas share events."
+        ),
+    )
+
+    # Redis channel for SSE JSON lines (publish/subscribe).
+    event_pubsub_channel: str = Field(
+        default="verifiedsignal:sse",
+        validation_alias="EVENT_PUBSUB_CHANNEL",
+    )
+
     # When true, store objects in memory instead of MinIO/S3.
     use_fake_storage: bool = Field(default=False, validation_alias="USE_FAKE_STORAGE")
 
@@ -109,7 +125,9 @@ class Settings(BaseSettings):
         ge=60,
         le=604_800,
         validation_alias="DOWNLOAD_PRESIGNED_TTL_SECONDS",
-        description="TTL (seconds) for presigned GET URLs on GET /documents/{id}/file when redirect=true.",
+        description=(
+            "TTL (seconds) for presigned GET URLs on GET /documents/{id}/file when redirect=true."
+        ),
     )
 
     opensearch_url: str = Field(

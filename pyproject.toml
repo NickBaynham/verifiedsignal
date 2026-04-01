@@ -48,11 +48,12 @@ package-dir = "src"
 api = "python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
 api-prod = "python -m uvicorn app.main:app --host 0.0.0.0 --port 8000"
 worker = "python -m arq worker.main.WorkerSettings"
+reference-http-scorer = { shell = "PYTHONPATH=scripts python -m uvicorn reference_http_scorer.app:app --host 127.0.0.1 --port 9100" }
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q"
-pythonpath = ["."]
+pythonpath = [".", "scripts"]
 markers = [
     "unit: fast tests with no external services",
     "integration: requires DATABASE_URL and migrations applied to Postgres",
@@ -62,7 +63,16 @@ markers = [
 [tool.ruff]
 line-length = 100
 target-version = "py311"
-src = ["src", "tests", "app", "worker"]
+src = ["src", "tests", "app", "worker", "scripts"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP"]
+
+[tool.coverage.run]
+source = ["app/services"]
+
+[tool.coverage.report]
+precision = 1
+show_missing = true
+skip_covered = false
+fail_under = 45
