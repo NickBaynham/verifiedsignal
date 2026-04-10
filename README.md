@@ -14,7 +14,7 @@ This repo is an **early scaffold** with the following in place:
 - **Makefile** — `setup`, `lock` / `sync`, `test` / `test-unit` / `test-integration` / `test-e2e` / **`test-api`**, **`ci-local`** / **`ci-local-stop`**, `lint`, `format`, Docker targets.
 - **Tests** — **`pytest`** markers: **`unit`**, **`integration`**, **`e2e`**, **`api`**. See **[`tests/README.md`](tests/README.md)**.
 - **CI** — **[`.github/workflows/ci.yml`](.github/workflows/ci.yml)** — **Python** job: Ruff on `src`, `tests`, `app`, `worker`, **`scripts`**; **`pip-audit`** on exported requirements; Postgres **16** + migrations; **`pytest`** with **`--cov=app/services`** (line coverage floor **45%** via **`pyproject.toml`** `[tool.coverage.report]`, **`term-missing`** + **`coverage.xml`** artifact). **Web** job: **`apps/web`** — `npm ci`, **`npm audit`**, Playwright Chromium, **`npm run build`**, **`test:unit`**, **`test:e2e`**, **`test:e2e:api-mock`**. **Dependabot** — **[`.github/dependabot.yml`](.github/dependabot.yml)** for **GitHub Actions**, **pip** (root / PDM lock), and **`apps/web`** npm.
-- **Security / hardening (high level)** — **`ENVIRONMENT=staging`** is treated like production for **client-visible** surfaces: **`/health`** omits dependency error/DSN detail, and **Swagger/OpenAPI** stay off unless **`EXPOSE_OPENAPI_DOCS=true`**. **`ENVIRONMENT=production|prod`** additionally logs startup warnings for **`USE_FAKE_*`** and for **`VERIFIEDSIGNAL_ALLOW_DEFAULT_COLLECTION_FALLBACK=true`** (risky multi-tenant default). **`VERIFIEDSIGNAL_ALLOW_DEFAULT_COLLECTION_FALLBACK`** defaults to **`false`**; set **`true`** in **`.env.example`-style** local dev when you rely on the seeded default inbox. Per-IP **rate limits** (**slowapi**) apply to **`/auth/*`** and document intake (**`RATE_LIMIT_*`**, **`RATE_LIMIT_ENABLED`** in **`.env.example`**); limits are **in-memory per API process** (not shared across replicas). Run **`pdm export -f requirements --without-hashes -o /tmp/r.txt && pdm run pip-audit -r /tmp/r.txt`** locally to match CI.
+- **Security / hardening (high level)** — **`ENVIRONMENT=staging`** is treated like production for **client-visible** surfaces: **`/health`** omits dependency error/DSN detail, and **Swagger/OpenAPI** stay off unless **`EXPOSE_OPENAPI_DOCS=true`**. **`ENVIRONMENT=production|prod`** additionally logs startup warnings for **`USE_FAKE_*`** and for **`VERIFIEDSIGNAL_ALLOW_DEFAULT_COLLECTION_FALLBACK=true`** (risky multi-tenant default). **`VERIFIEDSIGNAL_ALLOW_DEFAULT_COLLECTION_FALLBACK`** defaults to **`false`**; set **`true`** in **`.env.example`-style** local dev when you rely on the seeded default inbox. Per-IP **rate limits** (**slowapi**) apply to **`/auth/*`** and document intake (**`RATE_LIMIT_*`**, **`RATE_LIMIT_ENABLED`** in **`.env.example`**); limits are **in-memory per API process** (not shared across replicas). For local commands that mirror CI dependency audits, see **[Dependency security](#dependency-security)** below.
 - **Docker** — **`Dockerfile`** copies `app/`, `worker/`, `src/`, `tests/`, `db/`, sets **`PYTHONPATH=/app`**, default CMD **`api-prod`** (uvicorn).
 - **Docker Compose** — infra + runtimes:
   - **PostgreSQL**, **Redis**, **MinIO**, **OpenSearch**, **Dashboards**
@@ -31,6 +31,25 @@ This repo is an **early scaffold** with the following in place:
 - **[PDM](https://pdm-project.org/latest/#installation)** on your `PATH` (`pdm --version`)
 - **GNU Make**
 - **Docker** and **Docker Compose** v2 (`docker compose version`) if you use the container workflow
+
+## Dependency security
+
+CI runs **`pip-audit`** on exported Python requirements and **`npm audit`** in **`apps/web`** (see **[`.github/workflows/ci.yml`](.github/workflows/ci.yml)**). Advisory databases and transitive pins change over time, so refresh locks occasionally—e.g. **`pdm lock`** / **`pdm update`** for Python and **`npm update`** or Dependabot PRs for the web app—even when audits are currently clean.
+
+To mirror the Python audit locally:
+
+```bash
+pdm export -f requirements --without-hashes -o /tmp/requirements-audit.txt
+pdm run pip-audit -r /tmp/requirements-audit.txt
+```
+
+For the web UI:
+
+```bash
+cd apps/web && npm audit
+```
+
+If you use **`uv`** with the repo’s **`uv.lock`**, keep that lockfile aligned with **`pyproject.toml`** (e.g. **`uv lock`**) and run your usual **`uv`**-based audit; CI uses **PDM** and does not validate **`uv.lock`**.
 
 ## Quick start (local)
 
