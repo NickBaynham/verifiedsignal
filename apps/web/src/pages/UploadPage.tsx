@@ -1,12 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
+import { listCollections } from "../api/collections";
 import { ingestDocumentFromUrl, uploadDocumentFile } from "../api/documents";
+import type { CollectionRow } from "../api/types";
 import { ApiError } from "../api/http";
 import { fetchDocumentPipeline } from "../api/pipeline";
 import { useAuth } from "../context/AuthContext";
 import { isApiBackend } from "../config";
 import { useApiEventSource } from "../hooks/useApiEventSource";
 import type { PipelineStage } from "../demo/types";
+import { buildIntakeUserMetadata } from "../lib/intakeUserMetadata";
 import {
   clearStoredDirSyncState,
   collectFilesRecursive,
@@ -74,6 +77,43 @@ export function UploadPage() {
   const [apiError, setApiError] = useState<string | null>(null);
   const [trackDocId, setTrackDocId] = useState<string | null>(null);
   const [pipelineLog, setPipelineLog] = useState<string>("");
+  const [uploadCollections, setUploadCollections] = useState<CollectionRow[]>([]);
+  const [uploadCollectionId, setUploadCollectionId] = useState("");
+  const [uploadCollectionsLoaded, setUploadCollectionsLoaded] = useState(false);
+  const [uploadMetaDescription, setUploadMetaDescription] = useState("");
+
+  useEffect(() => {
+    if (!api || !accessToken) {
+      setUploadCollections([]);
+      setUploadCollectionId("");
+      setUploadCollectionsLoaded(false);
+      return;
+    }
+    let cancelled = false;
+    setUploadCollectionsLoaded(false);
+    void listCollections(accessToken).then(
+      (r) => {
+        if (cancelled) return;
+        const cols = r.collections;
+        setUploadCollections(cols);
+        setUploadCollectionId((prev) => {
+          if (prev && cols.some((c) => c.id === prev)) return prev;
+          return cols[0]?.id ?? "";
+        });
+        setUploadCollectionsLoaded(true);
+      },
+      () => {
+        if (!cancelled) {
+          setUploadCollections([]);
+          setUploadCollectionId("");
+          setUploadCollectionsLoaded(true);
+        }
+      },
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [api, accessToken]);
 
   useEffect(() => {
     if (tab !== "directory") return;
@@ -147,6 +187,8 @@ export function UploadPage() {
         rootName,
         files: collected,
         onLog: appendDirLog,
+        collectionId: uploadCollectionId || undefined,
+        metadata: buildIntakeUserMetadata(uploadMetaDescription),
       });
       setDirTrackedCount(Object.keys(loadStoredDirSyncState()?.entries ?? {}).length);
     } catch (e) {
@@ -155,7 +197,7 @@ export function UploadPage() {
       dirSyncInFlight.current = false;
       setDirSyncing(false);
     }
-  }, [api, accessToken, appendDirLog]);
+  }, [api, accessToken, appendDirLog, uploadCollectionId, uploadMetaDescription]);
 
   const runDirectorySyncFromFileList = useCallback(
     async (picked: FileList | readonly File[]) => {
@@ -172,6 +214,8 @@ export function UploadPage() {
           rootName,
           files,
           onLog: appendDirLog,
+          collectionId: uploadCollectionId || undefined,
+          metadata: buildIntakeUserMetadata(uploadMetaDescription),
         });
         setDirRootLabel(rootName);
         setDirTrackedCount(Object.keys(loadStoredDirSyncState()?.entries ?? {}).length);
@@ -182,7 +226,7 @@ export function UploadPage() {
         setDirSyncing(false);
       }
     },
-    [api, accessToken, appendDirLog],
+    [api, accessToken, appendDirLog, uploadCollectionId, uploadMetaDescription],
   );
 
   useEffect(() => {
@@ -287,8 +331,12 @@ export function UploadPage() {
     try {
       const outs: string[] = [];
       let lastId: string | null = null;
+      const metadata = buildIntakeUserMetadata(uploadMetaDescription);
       for (const file of selectedFiles) {
-        const res = await uploadDocumentFile(accessToken, file);
+        const res = await uploadDocumentFile(accessToken, file, {
+          collectionId: uploadCollectionId || undefined,
+          ...(metadata ? { metadata } : {}),
+        });
         outs.push(`${file.name} → ${res.document_id} (${res.status})`);
         lastId = res.document_id;
       }
@@ -308,7 +356,12 @@ export function UploadPage() {
     setApiMessage(null);
     setProcessing(true);
     try {
-      const res = await ingestDocumentFromUrl(accessToken, { url: urlInput.trim() });
+      const metadata = buildIntakeUserMetadata(uploadMetaDescription);
+      const res = await ingestDocumentFromUrl(accessToken, {
+        url: urlInput.trim(),
+        collection_id: uploadCollectionId || undefined,
+        ...(metadata ? { metadata } : {}),
+      });
       setApiMessage(`Queued ${res.document_id} (${res.status}) for ${res.source_url}`);
       setTrackDocId(res.document_id);
       setUrlInput("");
@@ -335,6 +388,67 @@ export function UploadPage() {
           </>
         )}
       </p>
+
+      {api && accessToken ? (
+        <div className="card" style={{ marginBottom: "1rem" }}>
+          <h2 style={{ marginTop: 0, fontSize: "1rem" }}>Target collection</h2>
+          {!uploadCollectionsLoaded ? (
+            <p style={{ fontSize: "0.9rem", color: "var(--text-muted)", margin: 0 }}>Loading collections…</p>
+          ) : uploadCollections.length === 0 ? (
+            <p style={{ fontSize: "0.9rem", color: "var(--text-muted)", margin: 0 }}>
+              No collections returned for your account. Uploads omit <code>collection_id</code> and use the API
+              default (if configured).
+            </p>
+          ) : (
+            <>
+              <label htmlFor="upload-target-collection" style={{ display: "block", marginBottom: 6, fontSize: "0.9rem" }}>
+                Upload into
+              </label>
+              <select
+                id="upload-target-collection"
+                value={uploadCollectionId}
+                onChange={(e) => setUploadCollectionId(e.target.value)}
+                disabled={processing || dirSyncing}
+                style={{
+                  width: "100%",
+                  maxWidth: 420,
+                  padding: "0.45rem 0.5rem",
+                  borderRadius: 6,
+                  border: "1px solid var(--border)",
+                }}
+              >
+                {uploadCollections.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+              <p style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginTop: "0.5rem", marginBottom: 0 }}>
+                Applies to <strong>file upload</strong>, <strong>URL intake</strong>, and <strong>local folder</strong> sync
+                in this session.
+              </p>
+            </>
+          )}
+          <hr style={{ border: 0, borderTop: "1px solid var(--border)", margin: "1.25rem 0" }} />
+          <h2 style={{ marginTop: 0, fontSize: "1rem" }}>Description (optional)</h2>
+          <p style={{ fontSize: "0.8rem", color: "var(--text-muted)", marginTop: 0 }}>
+            When set, stored on the document as <code>user_metadata.description</code> (included in search metadata text
+            on the API).
+          </p>
+          <div className="field" style={{ marginTop: "0.65rem" }}>
+            <label htmlFor="upload-meta-description">Description</label>
+            <textarea
+              id="upload-meta-description"
+              rows={3}
+              value={uploadMetaDescription}
+              onChange={(e) => setUploadMetaDescription(e.target.value)}
+              disabled={processing || dirSyncing}
+              placeholder="Summary, context, or notes…"
+              style={{ width: "100%", maxWidth: 560, resize: "vertical" }}
+            />
+          </div>
+        </div>
+      ) : null}
 
       <div className="tabs">
         <button type="button" className={tab === "files" ? "active" : ""} onClick={() => setTab("files")}>

@@ -38,12 +38,15 @@ export async function getDocument(accessToken: string, documentId: string): Prom
 export async function uploadDocumentFile(
   accessToken: string,
   file: File,
-  options: { collectionId?: string; title?: string } = {},
+  options: { collectionId?: string; title?: string; metadata?: Record<string, unknown> } = {},
 ): Promise<IntakeResponse> {
   const fd = new FormData();
   fd.append("file", file, file.name);
   if (options.collectionId) fd.append("collection_id", options.collectionId);
   if (options.title) fd.append("title", options.title);
+  if (options.metadata && Object.keys(options.metadata).length > 0) {
+    fd.append("metadata", JSON.stringify(options.metadata));
+  }
   const res = await apiFetch("/api/v1/documents", {
     method: "POST",
     accessToken,
@@ -58,7 +61,12 @@ export async function uploadDocumentFile(
 
 export async function ingestDocumentFromUrl(
   accessToken: string,
-  payload: { url: string; collection_id?: string | null; title?: string | null },
+  payload: {
+    url: string;
+    collection_id?: string | null;
+    title?: string | null;
+    metadata?: Record<string, unknown> | null;
+  },
 ): Promise<UrlIntakeResponse> {
   const res = await apiFetch("/api/v1/documents/from-url", {
     method: "POST",

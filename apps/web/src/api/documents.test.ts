@@ -4,7 +4,7 @@ vi.mock("../config", () => ({
   getApiBaseUrl: () => "http://api.test",
 }));
 
-import { copyDocument, moveDocument } from "./documents";
+import { copyDocument, moveDocument, uploadDocumentFile } from "./documents";
 import { ApiError } from "./http";
 
 const summary = {
@@ -57,6 +57,30 @@ describe("documents transfer helpers", () => {
     expect(fetchMock.mock.calls[0][0]).toBe(
       `http://api.test/api/v1/documents/${summary.id}/copy`,
     );
+  });
+
+  it("uploadDocumentFile appends metadata JSON when provided", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          document_id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+          status: "queued",
+          storage_key: "raw/x",
+          job_id: null,
+          enqueue_error: null,
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const file = new File(["hi"], "t.txt", { type: "text/plain" });
+    await uploadDocumentFile("tok", file, {
+      metadata: { description: "hello" },
+    });
+    const init = fetchMock.mock.calls[0][1] as RequestInit;
+    expect(init.body).toBeInstanceOf(FormData);
+    const fd = init.body as FormData;
+    expect(fd.get("metadata")).toBe(JSON.stringify({ description: "hello" }));
   });
 
   it("moveDocument surfaces ApiError", async () => {
