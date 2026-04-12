@@ -14,7 +14,7 @@ The canonical copy of document metadata lives in **PostgreSQL**; **OpenSearch** 
 ## How you interact with the product
 
 1. **HTTP API** — The primary interface. All versioned resources live under a prefix, usually **`/api/v1`**. Session-style auth routes are under **`/auth`** (no `/api/v1` prefix).
-2. **Browser UI** — The React app in **`apps/web`** runs as a **mock demo** when **`VITE_API_URL`** is unset, or talks to the real API when it is set (dashboard, documents, upload, search, collections, analytics, SSE + pipeline progress). See the [web README](../../apps/web/README.md).
+2. **Browser UI** — The React app in **`apps/web`** runs as a **mock demo** when **`VITE_API_URL`** is unset, or talks to the real API when it is set (dashboard, documents, upload—including **local folder** intake and optional client-side sync on **`/library/upload`**—search, collections, analytics, SSE + pipeline progress). See the [web README](../../apps/web/README.md) and [Documents](documents.md#local-folder-ingestion-verifiedsignal-web-app).
 
 Your organization’s deployment will give you a **base URL** (for example `https://api.example.com`). Every example below uses a placeholder:
 

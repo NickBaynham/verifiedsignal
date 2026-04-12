@@ -14,7 +14,7 @@ This folder describes what you can do with the product **as it exists today**: H
 | [Getting started](getting-started.md) | What the product does, base URLs, interactive API docs, limits |
 | [Signing in and tokens](signing-in.md) | Email signup/login, refresh cookie, access token, logout |
 | [Workspace and collections](workspace-and-collections.md) | Your org, Inbox, profile, choosing a collection |
-| [Documents](documents.md) | Upload files, add by URL, list, open details, delete, statuses |
+| [Documents](documents.md) | Upload files, add by URL, **local folder tree + client-side sync** (web app), list, open details, delete, statuses |
 | [Search and live updates](search-and-events.md) | Authenticated keyword search (filters + facets), authenticated SSE + tenant filtering, pipeline polling, collection analytics |
 | [Status and troubleshooting](status-and-troubleshooting.md) | Service health, common errors, who to ask |
 

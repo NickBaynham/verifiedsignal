@@ -7,8 +7,10 @@ Thin wrappers around supabase-py GoTrue client; JWT validation for API routes li
 
 from __future__ import annotations
 
-from typing import Annotated
+from collections.abc import Callable
+from typing import Annotated, TypeVar
 
+import httpx
 from fastapi import APIRouter, Cookie, Depends, HTTPException, Request, Response, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import JWTError
@@ -47,6 +49,30 @@ REFRESH_COOKIE = "vs_refresh_token"
 REFRESH_MAX_AGE = 7 * 24 * 3600
 COOKIE_PATH = "/auth"
 
+_SUPABASE_UNREACHABLE_DETAIL = (
+    "Cannot reach Supabase (check SUPABASE_URL). When the API runs on your machine "
+    "(pdm run api / make api-local), use http://127.0.0.1:54321 for local Supabase. "
+    "Docker-only hostnames (e.g. host.docker.internal) only work from inside Compose."
+)
+
+T = TypeVar("T")
+
+
+def _supabase_auth_call(func: Callable[[], T]) -> T:
+    """Map transport errors from GoTrue HTTP calls to HTTP errors (avoid raw 500)."""
+    try:
+        return func()
+    except httpx.ConnectError as e:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=_SUPABASE_UNREACHABLE_DETAIL,
+        ) from e
+    except httpx.TimeoutException as e:
+        raise HTTPException(
+            status_code=status.HTTP_504_GATEWAY_TIMEOUT,
+            detail="Supabase did not respond in time (check SUPABASE_URL and network).",
+        ) from e
+
 
 def _require_supabase_config(settings: Settings) -> None:
     if not settings.supabase_auth_configured:
@@ -70,7 +96,9 @@ def auth_signup(
     _require_supabase_config(settings)
     client = get_supabase_service_client()
     try:
-        client.auth.sign_up({"email": body.email, "password": body.password})
+        _supabase_auth_call(
+            lambda: client.auth.sign_up({"email": body.email, "password": body.password}),
+        )
     except AuthWeakPasswordError as e:
         raise HTTPException(status_code=400, detail=_auth_error_detail(e)) from e
     except AuthApiError as e:
@@ -133,8 +161,10 @@ def auth_login(
     _require_supabase_config(settings)
     client = get_supabase_service_client()
     try:
-        res = client.auth.sign_in_with_password(
-            {"email": body.email, "password": body.password},
+        res = _supabase_auth_call(
+            lambda: client.auth.sign_in_with_password(
+                {"email": body.email, "password": body.password},
+            ),
         )
     except AuthInvalidCredentialsError as e:
         raise HTTPException(status_code=401, detail="Invalid email or password") from e
@@ -174,7 +204,7 @@ def auth_refresh(
         raise HTTPException(status_code=401, detail="Missing refresh token")
     client = get_supabase_service_client()
     try:
-        res = client.auth.refresh_session(refresh_token)
+        res = _supabase_auth_call(lambda: client.auth.refresh_session(refresh_token))
     except (AuthApiError, AuthSessionMissingError) as e:
         raise HTTPException(status_code=401, detail="Refresh failed") from e
     session = res.session
@@ -208,6 +238,8 @@ def auth_logout(
             client.auth.sign_out()
         except (AuthApiError, AuthSessionMissingError):
             pass
+        except (httpx.ConnectError, httpx.TimeoutException):
+            pass
     response.delete_cookie(
         REFRESH_COOKIE,
         path=COOKIE_PATH,
@@ -228,7 +260,7 @@ def auth_reset_password(
     _require_supabase_config(settings)
     client = get_supabase_service_client()
     try:
-        client.auth.reset_password_for_email(body.email)
+        _supabase_auth_call(lambda: client.auth.reset_password_for_email(body.email))
     except AuthApiError:
         pass
     return {"message": "ok"}

@@ -1,0 +1,1 @@
+root fixture for folder upload e2e

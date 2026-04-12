@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock
 
+import httpx
 import pytest
 from app.auth.supabase_service import reset_supabase_service_client
 from app.core.config import reset_settings_cache
@@ -99,6 +100,25 @@ def test_login_invalid_password(supabase_auth_env: None, monkeypatch: pytest.Mon
             json={"email": "u@example.com", "password": "wrong"},
         )
     assert r.status_code == 401
+
+
+def test_login_supabase_unreachable(
+    supabase_auth_env: None,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    mock = MagicMock()
+    mock.auth.sign_in_with_password.side_effect = httpx.ConnectError(
+        "nodename nor servname provided, or not known",
+        request=MagicMock(),
+    )
+    _mock_client(monkeypatch, mock)
+    with TestClient(create_app()) as client:
+        r = client.post(
+            "/auth/login",
+            json={"email": "u@example.com", "password": "password123"},
+        )
+    assert r.status_code == 503
+    assert "SUPABASE_URL" in r.json()["detail"]
 
 
 def test_refresh_ok(supabase_auth_env: None, monkeypatch: pytest.MonkeyPatch) -> None:

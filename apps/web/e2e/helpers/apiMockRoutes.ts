@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import type { Page } from "@playwright/test";
 import { E2E_MOCK_API_ORIGIN } from "../../playwright.api-mock.config";
 
@@ -43,6 +44,27 @@ const detailPayload = {
 export async function installApiMockRoutes(page: Page) {
   const origin = E2E_MOCK_API_ORIGIN;
   let e2eDocDeleted = false;
+
+  /** Any UUID document DELETE (folder sync removes / replaces paths). */
+  await page.route(
+    (url) => {
+      if (url.toString().split("?")[0] === `${origin}/api/v1/documents/${DOC_ID}`) return false;
+      const base = url.toString().split("?")[0];
+      return (
+        base.startsWith(`${origin}/api/v1/documents/`) &&
+        !base.includes("/file") &&
+        !base.includes("/pipeline") &&
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(base.split("/").pop() ?? "")
+      );
+    },
+    async (route) => {
+      if (route.request().method() === "DELETE") {
+        await route.fulfill({ status: 204, body: "" });
+        return;
+      }
+      await route.fallback();
+    },
+  );
 
   await page.route(
     (url) => url.toString().split("?")[0] === `${origin}/api/v1/events/stream`,
@@ -134,6 +156,14 @@ export async function installApiMockRoutes(page: Page) {
       });
     },
   );
+
+  await page.route(`${origin}/auth/signup`, async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ message: "Account created (mock)." }),
+    });
+  });
 
   await page.route(`${origin}/auth/login`, async (route) => {
     await route.fulfill({
@@ -312,9 +342,9 @@ export async function installApiMockRoutes(page: Page) {
           status: 200,
           contentType: "application/json",
           body: JSON.stringify({
-            document_id: "00000000-0000-4000-8000-0000000000e2",
+            document_id: randomUUID(),
             status: "queued",
-            storage_key: "mock/key",
+            storage_key: `mock/key/${randomUUID()}`,
             job_id: "job-e2e",
           }),
         });

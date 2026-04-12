@@ -6,6 +6,25 @@ export interface AccessTokenPayload {
   token_type?: string;
 }
 
+export interface SignupResponsePayload {
+  message: string;
+}
+
+export async function signupWithPassword(
+  email: string,
+  password: string,
+): Promise<SignupResponsePayload> {
+  const res = await apiFetch("/auth/signup", {
+    method: "POST",
+    jsonBody: { email, password },
+    credentials: "include",
+  });
+  if (!res.ok) {
+    throw new ApiError(await readErrorMessage(res), res.status);
+  }
+  return (await res.json()) as SignupResponsePayload;
+}
+
 export async function loginWithPassword(
   email: string,
   password: string,

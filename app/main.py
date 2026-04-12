@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from contextlib import asynccontextmanager
 
@@ -24,6 +25,7 @@ from app.api.routes import (
 )
 from app.core.config import get_settings
 from app.rate_limit import limiter, sync_limiter_from_settings
+from app.services.dev_auth_bootstrap import bootstrap_dev_auth_user
 from app.services.event_service import close_event_hub
 from app.services.queue_backend import close_job_queue
 from app.services.storage_service import reset_object_storage
@@ -61,6 +63,7 @@ def _register_exception_handlers(application: FastAPI) -> None:
 async def lifespan(app: FastAPI):
     _ = app
     settings = get_settings()
+    await asyncio.to_thread(bootstrap_dev_auth_user, settings)
     if settings.strict_production_lifespan_warnings():
         if settings.allow_default_collection_fallback:
             logger.warning(

@@ -10,3 +10,12 @@ interface ImportMetaEnv {
 interface ImportMeta {
   readonly env: ImportMetaEnv;
 }
+
+/** File System Access API (Chromium / Edge); not in all TypeScript DOM libs. */
+interface Window {
+  showDirectoryPicker?: (options?: { mode?: "read" | "readwrite" }) => Promise<FileSystemDirectoryHandle>;
+}
+
+interface FileSystemDirectoryHandle {
+  entries(): AsyncIterableIterator<[string, FileSystemHandle]>;
+}

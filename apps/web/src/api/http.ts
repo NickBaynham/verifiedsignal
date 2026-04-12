@@ -71,8 +71,21 @@ export async function readErrorMessage(res: Response): Promise<string> {
   const text = await res.text();
   const parsed = parseJsonSafe(text);
   if (parsed && typeof parsed === "object" && parsed !== null && "detail" in parsed) {
-    const d = (parsed as { detail: unknown }).detail;
-    if (typeof d === "string") return d;
+    const o = parsed as Record<string, unknown>;
+    const d = o.detail;
+    if (typeof d === "string") {
+      const base = d;
+      const extraMsg =
+        typeof o.message === "string" && o.message.trim() && o.message.trim() !== base
+          ? o.message.trim()
+          : "";
+      const errType =
+        typeof o.error_type === "string" && o.error_type.trim() ? o.error_type.trim() : "";
+      if (extraMsg) {
+        return errType ? `${base} (${errType}): ${extraMsg}` : `${base}: ${extraMsg}`;
+      }
+      return base;
+    }
     if (Array.isArray(d)) return JSON.stringify(d);
   }
   if (typeof parsed === "string" && parsed.trim()) return parsed;

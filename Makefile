@@ -1,4 +1,4 @@
-.PHONY: help setup lock sync install install-supabase test test-unit test-integration test-e2e test-api lint format clean config resources docker-build docker-up docker-down docker-test docker-run web-config web-dev api-local api-local-prod api-local-restart migrate migrate-002 migrate-003 migrate-reset ci-local ci-local-stop ci-local-postgres ci-local-migrate-sql ci-local-migrate
+.PHONY: help setup lock sync install install-supabase test test-unit test-integration test-e2e test-api lint format clean config resources docker-build docker-up docker-down docker-test docker-run web-config web-dev dev dev-stack dev-down local api-local-postgres api-local api-local-prod api-local-restart migrate migrate-002 migrate-003 migrate-reset ci-local ci-local-stop ci-local-postgres ci-local-migrate-sql ci-local-migrate
 
 # Default Python / PDM (override if needed)
 PYTHON ?= python3
@@ -24,6 +24,9 @@ LOCAL_API_OS_PORT ?= 9200
 LOCAL_API_DATABASE_URL ?= postgresql://$(LOCAL_API_DB_USER):$(LOCAL_API_DB_PASSWORD)@127.0.0.1:$(LOCAL_API_PG_PORT)/$(LOCAL_API_DB_NAME)
 # HTTP bind for api-local / api-local-prod (override if 8000 is in use, e.g. another uvicorn).
 LOCAL_API_PORT ?= 8000
+# When the API runs on the host, local Supabase CLI listens on localhost (Compose .env often uses
+# host.docker.internal for the app container). Override for hosted Supabase, e.g. https://….supabase.co
+LOCAL_API_SUPABASE_URL ?= http://127.0.0.1:54321
 
 # `make migrate` — Docker Compose postgres service (must be running: docker compose up -d postgres).
 COMPOSE_POSTGRES_SERVICE ?= postgres
@@ -35,7 +38,8 @@ API_LOCAL_ENV = env \
 	DATABASE_URL='$(LOCAL_API_DATABASE_URL)' \
 	REDIS_URL='redis://127.0.0.1:$(LOCAL_API_REDIS_PORT)/0' \
 	S3_ENDPOINT_URL='http://127.0.0.1:$(LOCAL_API_MINIO_PORT)' \
-	OPENSEARCH_URL='http://127.0.0.1:$(LOCAL_API_OS_PORT)'
+	OPENSEARCH_URL='http://127.0.0.1:$(LOCAL_API_OS_PORT)' \
+	SUPABASE_URL='$(LOCAL_API_SUPABASE_URL)'
 
 help:
 	@echo "VerifiedSignal — common targets"
@@ -62,15 +66,20 @@ help:
 	@echo "  make docker-run     One-off app container run"
 	@echo "  make web-config     Create apps/web/.env.local from .env.example if missing (API → Docker :8000)"
 	@echo "  make web-dev        web-config + npm run dev in apps/web (npm install in apps/web once first)"
+	@echo "  make dev-stack      Docker: Postgres+Redis+MinIO+OpenSearch+Dashboards (waits healthy; uses LOCAL_API_* ports)"
+	@echo "  make dev            dev-stack + FastAPI on host (same as: stack then api-local; use for day-to-day)"
+	@echo "  make local          Alias for dev"
+	@echo "  make dev-down       Stop dev-stack services (leaves volumes; does not stop compose app/worker)"
 	@echo "  make migrate        Apply 001–005 (fails if 001 already applied — use migrate-00x or migrate-reset)"
 	@echo "  make migrate-002    Apply only 002 (when 001 is already on the database)"
 	@echo "  make migrate-003    Apply only 003 (body_text column; when 001+002 already applied)"
 	@echo "  make migrate-004    Apply only 004 (extract_artifact_key; when 001–003 already applied)"
 	@echo "  make migrate-005    Apply only 005 (user_metadata; when 001–004 already applied)"
 	@echo "  make migrate-reset  Drop app schema + re-apply 001–005 (dev only; needs MIGRATE_RESET_OK=1)"
-	@echo "  make api-local      Run FastAPI on host with 127.0.0.1 URLs (LOCAL_API_PG_PORT, LOCAL_API_PORT=8000)"
+	@echo "  make api-local-postgres  docker compose up -d postgres (POSTGRES_PORT=LOCAL_API_PG_PORT) + wait for pg_isready"
+	@echo "  make api-local      Postgres + FastAPI on host (for Redis/MinIO/OpenSearch use make dev-stack first, or make dev)"
 	@echo "  make api-local-prod Same as api-local without --reload"
-	@echo "  make api-local-restart  Kill process on LOCAL_API_PORT then run api-local (same vars)"
+	@echo "  make api-local-restart  Kill process on LOCAL_API_PORT then api-local (forwards LOCAL_API_PG_PORT / LOCAL_API_PORT)"
 	@echo "  make ci-local       Ephemeral Postgres:16 + migrations 001–005 + Ruff + pytest --cov=app/services; removes container after (even on failure)"
 	@echo "  make ci-local-stop  Remove the ci-local Postgres container (manual cleanup)"
 
@@ -156,6 +165,74 @@ web-config:
 web-dev: web-config
 	cd apps/web && npm run dev
 
+# --- One-shot local development (host API + Compose infra) ---
+# Starts every backing service api-local expects on 127.0.0.1, then you can run `make api-local` alone after changes.
+# Does not start Supabase CLI (run `supabase start` in ./supabase when you need /auth/* against local GoTrue).
+
+# All backing services the host-run API expects (ports follow LOCAL_API_* so they match API_LOCAL_ENV).
+dev-stack: config
+	@command -v docker >/dev/null 2>&1 || { echo >&2 "docker not on PATH"; exit 1; }; \
+	command -v curl >/dev/null 2>&1 || { echo >&2 "curl not on PATH (needed for MinIO/OpenSearch health waits)"; exit 1; }; \
+	set -e; \
+	echo "Starting Postgres (host :$(LOCAL_API_PG_PORT)), Redis (:$(LOCAL_API_REDIS_PORT)), MinIO (:$(LOCAL_API_MINIO_PORT)), OpenSearch (:$(LOCAL_API_OS_PORT))…"; \
+	POSTGRES_PORT=$(LOCAL_API_PG_PORT) \
+	REDIS_PORT=$(LOCAL_API_REDIS_PORT) \
+	MINIO_API_PORT=$(LOCAL_API_MINIO_PORT) \
+	OPENSEARCH_PORT=$(LOCAL_API_OS_PORT) \
+	$(DOCKER_COMPOSE) up -d postgres redis minio opensearch opensearch-dashboards; \
+	echo "Waiting for Postgres (pg_isready)…"; \
+	attempt=0; \
+	until $(DOCKER_COMPOSE) exec -T $(COMPOSE_POSTGRES_SERVICE) pg_isready -U $(LOCAL_API_DB_USER) -d $(LOCAL_API_DB_NAME) >/dev/null 2>&1; do \
+		attempt=$$((attempt + 1)); \
+		if [ "$$attempt" -ge 90 ]; then echo >&2 "Postgres did not become ready in time"; exit 1; fi; \
+		sleep 1; \
+	done; \
+	echo "Waiting for Redis…"; \
+	attempt=0; \
+	until $(DOCKER_COMPOSE) exec -T redis redis-cli ping 2>/dev/null | grep -q PONG; do \
+		attempt=$$((attempt + 1)); \
+		if [ "$$attempt" -ge 60 ]; then echo >&2 "Redis did not become ready in time"; exit 1; fi; \
+		sleep 1; \
+	done; \
+	echo "Waiting for MinIO…"; \
+	attempt=0; \
+	until curl -fsS "http://127.0.0.1:$(LOCAL_API_MINIO_PORT)/minio/health/live" >/dev/null 2>&1; do \
+		attempt=$$((attempt + 1)); \
+		if [ "$$attempt" -ge 60 ]; then echo >&2 "MinIO did not become ready in time"; exit 1; fi; \
+		sleep 2; \
+	done; \
+	echo "Waiting for OpenSearch…"; \
+	attempt=0; \
+	until curl -fsS "http://127.0.0.1:$(LOCAL_API_OS_PORT)/" >/dev/null 2>&1; do \
+		attempt=$$((attempt + 1)); \
+		if [ "$$attempt" -ge 120 ]; then echo >&2 "OpenSearch did not become ready in time"; exit 1; fi; \
+		sleep 2; \
+	done; \
+	echo "dev-stack: ready."
+
+dev-down:
+	@$(DOCKER_COMPOSE) stop postgres redis minio opensearch opensearch-dashboards 2>/dev/null || true
+	@echo "dev-down: stopped Postgres, Redis, MinIO, OpenSearch, OpenSearch Dashboards (volumes kept)."
+
+# Infra + uvicorn on host (blocking). Second terminal: make web-dev. First-time DB: make migrate (once).
+dev: dev-stack
+	@echo ""
+	@echo "—— Next steps ——"
+	@echo "  Auth:  cd supabase && supabase start   (local GoTrue; or use hosted Supabase in .env)"
+	@echo "  DB:    make migrate   (once on empty DB; skip if migrations already applied)"
+	@echo "  Web:   make web-dev   (other terminal)"
+	@echo ""
+	@echo "Starting API on 0.0.0.0:$(LOCAL_API_PORT)…"
+	@echo ""
+	$(MAKE) api-local \
+		LOCAL_API_PG_PORT=$(LOCAL_API_PG_PORT) \
+		LOCAL_API_PORT=$(LOCAL_API_PORT) \
+		LOCAL_API_REDIS_PORT=$(LOCAL_API_REDIS_PORT) \
+		LOCAL_API_MINIO_PORT=$(LOCAL_API_MINIO_PORT) \
+		LOCAL_API_OS_PORT=$(LOCAL_API_OS_PORT)
+
+local: dev
+
 migrate:
 	$(DOCKER_COMPOSE) exec -T $(COMPOSE_POSTGRES_SERVICE) psql -U $(COMPOSE_DB_USER) -d $(COMPOSE_DB_NAME) -v ON_ERROR_STOP=1 < db/migrations/001_initial_schema.up.sql
 	$(DOCKER_COMPOSE) exec -T $(COMPOSE_POSTGRES_SERVICE) psql -U $(COMPOSE_DB_USER) -d $(COMPOSE_DB_NAME) -v ON_ERROR_STOP=1 < db/migrations/002_intake_document_fields.up.sql
@@ -193,13 +270,34 @@ else
 	@exit 1
 endif
 
-api-local:
+# Skip with API_LOCAL_SKIP_COMPOSE_POSTGRES=1 when using a non-Compose Postgres (custom LOCAL_API_DATABASE_URL).
+api-local-postgres:
+	@if [ "$(API_LOCAL_SKIP_COMPOSE_POSTGRES)" = "1" ]; then \
+		echo "Skipping Compose Postgres (API_LOCAL_SKIP_COMPOSE_POSTGRES=1)"; \
+		exit 0; \
+	fi; \
+	command -v docker >/dev/null 2>&1 || { echo >&2 "docker not on PATH; start Postgres yourself or set API_LOCAL_SKIP_COMPOSE_POSTGRES=1"; exit 1; }; \
+	echo "Ensuring Postgres (host port $(LOCAL_API_PG_PORT) ← POSTGRES_PORT) via $(DOCKER_COMPOSE)…"; \
+	POSTGRES_PORT=$(LOCAL_API_PG_PORT) $(DOCKER_COMPOSE) up -d postgres; \
+	echo "Waiting for Postgres (pg_isready)…"; \
+	attempt=0; \
+	until $(DOCKER_COMPOSE) exec -T $(COMPOSE_POSTGRES_SERVICE) \
+		pg_isready -U $(LOCAL_API_DB_USER) -d $(LOCAL_API_DB_NAME) >/dev/null 2>&1; do \
+		attempt=$$((attempt + 1)); \
+		if [ "$$attempt" -ge 90 ]; then echo >&2 "Postgres did not become ready in time"; exit 1; fi; \
+		sleep 1; \
+	done; \
+	echo "Postgres is ready on 127.0.0.1:$(LOCAL_API_PG_PORT)"
+
+api-local: api-local-postgres
 	$(API_LOCAL_ENV) $(PDM) run python -m uvicorn app.main:app --host 0.0.0.0 --port $(LOCAL_API_PORT) --reload
 
-api-local-prod:
+api-local-prod: api-local-postgres
 	$(API_LOCAL_ENV) $(PDM) run python -m uvicorn app.main:app --host 0.0.0.0 --port $(LOCAL_API_PORT)
 
 # Free LOCAL_API_PORT (SIGTERM then SIGKILL) so a new uvicorn can bind; then start api-local.
+# Pass LOCAL_API_PG_PORT (and friends) explicitly so a run like
+# `make api-local-restart LOCAL_API_PG_PORT=5433` still starts Compose Postgres on 5433 and matches DATABASE_URL.
 api-local-restart:
 	@echo "Stopping listeners on TCP port $(LOCAL_API_PORT) (if any)…"
 	@for p in $$(lsof -nP -tiTCP:$(LOCAL_API_PORT) -sTCP:LISTEN 2>/dev/null | sort -u); do \
@@ -209,7 +307,10 @@ api-local-restart:
 	for p in $$(lsof -nP -tiTCP:$(LOCAL_API_PORT) -sTCP:LISTEN 2>/dev/null | sort -u); do \
 		[ -n "$$p" ] && kill -9 "$$p" 2>/dev/null || true; \
 	done
-	$(MAKE) api-local
+	@echo "Restarting api-local (Postgres host port $(LOCAL_API_PG_PORT), API port $(LOCAL_API_PORT))…"
+	$(MAKE) api-local \
+		LOCAL_API_PG_PORT=$(LOCAL_API_PG_PORT) \
+		LOCAL_API_PORT=$(LOCAL_API_PORT)
 
 ci-local-stop:
 	docker rm -f $(CI_LOCAL_PG_CONTAINER) 2>/dev/null || true

@@ -22,11 +22,20 @@ Set **`VITE_API_URL`** to your FastAPI origin (no trailing slash), e.g. `http://
 | Profile | `GET /api/v1/users/me` |
 | Dashboard | `GET /api/v1/documents`, `GET /api/v1/collections`, `GET /api/v1/events/stream` (SSE with `?access_token=`; see `docs/end-user/search-and-events.md`) |
 | Document reader | `GET /api/v1/documents/{id}`, `GET /api/v1/documents/{id}/file?redirect=false` (download original), `DELETE /api/v1/documents/{id}` (`canonical_score` when present — heuristic and/or HTTP scorer; see `docs/scoring-http.md`) |
-| Upload | `POST /api/v1/documents` (multipart), `POST /api/v1/documents/from-url`, poll `GET /api/v1/documents/{id}/pipeline` |
+| Upload | `POST /api/v1/documents` (multipart), `POST /api/v1/documents/from-url`, poll `GET /api/v1/documents/{id}/pipeline` — see **Local folder (below)** |
 | Search | `GET /api/v1/search` with optional `collection_id`, `content_type`, `status`, `ingest_source`, repeated `tags`, `include_facets` (Bearer required by default on the API). Demo mode mirrors these filters on mock hits and shows a static facet table when enabled. |
 | Collections | `GET /api/v1/collections`, `GET /api/v1/collections/{id}/analytics` |
 
 **Still mock / placeholder:** Reports, Billing, Security pages; demo-style histogram/trend **charts** on the analytics page (API mode adds real facet tables + Postgres KPIs). Search “mode” toggles (keyword / semantic / hybrid) are UI-only until the API supports them.
+
+### Local folder (`/library/upload` → **Local folder** tab)
+
+The SPA can ingest an entire **directory tree** from the user’s machine and optionally **keep documents aligned** with that folder using only browser APIs plus the same HTTP routes as single-file upload.
+
+- **Choose folder…** — uses `<input webkitdirectory>` so every supported browser can select a tree; each file is uploaded with **`POST /api/v1/documents`** (title defaults to the **relative path** inside the pick).
+- **Grant folder access** (Chromium / Edge) — uses the **File System Access API** (`showDirectoryPicker`) so the app can re-read the folder without a new picker dialog.
+- **Sync** (API mode): compares the current tree to a **path → `{ document_id, lastModified, size }`** map stored in **`localStorage`** (`verifiedsignal:localDirSync:v1`). New paths are uploaded; changed files (mtime/size) trigger **delete + re-upload**; paths gone from disk call **`DELETE /api/v1/documents/{id}`**. **Auto-sync every 60s** runs only when a live directory handle exists (Chromium).
+- **Limits:** sync state is **per browser profile**, not a server-side watched directory. Safari/Firefox users typically re-pick the folder for each sync unless the browser adds `showDirectoryPicker`. Details for operators and API fields: **[`docs/end-user/documents.md`](../../docs/end-user/documents.md)** (*Local folder ingestion*).
 
 ## Setup
 

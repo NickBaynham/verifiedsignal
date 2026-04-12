@@ -78,6 +78,30 @@ You only see documents in **collections your account can access** (see [Workspac
 
 **Security:** the server blocks many unsafe URLs (private networks, embedded passwords in the URL, etc.). If you get **400**, the message explains the rule. Full technical notes: [`../url-ingest.md`](../url-ingest.md).
 
+## Local folder ingestion (VerifiedSignal web app)
+
+The HTTP API has **no** “watch this server directory” or “sync this UNC path” operation. The **React app** (`apps/web`, route **`/library/upload`** → **Local folder** tab) adds a **client-side** workflow on top of the same endpoints as normal uploads:
+
+| Action | API used |
+|--------|----------|
+| Add or replace a file in the tree | **`POST /api/v1/documents`** (multipart), with **`title`** set to the file’s **relative path** inside the chosen folder so lists stay readable. |
+| Remove a document when the file disappeared locally, or before replacing a changed file | **`DELETE /api/v1/documents/{document_id}`** |
+
+**How sync works in the browser**
+
+1. The user selects a folder (either **Choose folder…** via `webkitdirectory`, or **Grant folder access** via **`showDirectoryPicker`** where supported).
+2. The app walks the tree and builds a list of **`{ relativePath, file }`** entries.
+3. It keeps a small index in **`localStorage`** (key **`verifiedsignal:localDirSync:v1`**) keyed by **folder root name**, mapping each **`relativePath`** to **`document_id`**, **`lastModified`**, and **`size`**.
+4. On **Sync now** (or **Auto-sync every 60s** when a directory handle is held in Chromium), the app: uploads paths not yet indexed; **deletes** then **re-uploads** when **`lastModified`** or **`size`** changed; **deletes** API documents for paths that no longer exist under the folder.
+
+**Operator / user expectations**
+
+- This is **not** multi-user server sync; clearing site data or another browser loses the index (documents in Postgres remain until deleted manually or by a new sync from a fresh index).
+- **Chromium-class** browsers can **re-read** the same folder without re-picking and can run **periodic** sync. Other browsers can still **Choose folder…** each time; each run compares the new file list to the stored map (same **`rootName`** bucket) and applies adds/removes/updates.
+- **`collection_id`** / **`metadata`** are not set by the folder UI today (same defaults as omitting them on a single-file form). If your deployment **requires** **`collection_id`**, use single-file upload or extend the client.
+
+See also [Getting started](getting-started.md).
+
 ## Opening one document
 
 **`GET /api/v1/documents/{document_id}`**  

@@ -7,7 +7,7 @@ A document intelligence platform. This repository uses **Python** with **[PDM](h
 This repo is an **early scaffold** with the following in place:
 
 - **CLI package** — Python **3.11+**, `src/verifiedsignal/`, small CLI (`pdm run python -m verifiedsignal`, `pdm run verifiedsignal`).
-- **Supabase session auth (optional)** — FastAPI routes under `**/auth`** (signup, login with **httpOnly** refresh cookie on path `/auth`, refresh, logout, reset email, `**POST /auth/sync-identity`**); JWT validation via **JWKS** or **HS256** (`app/auth/`). Bearer requests can **auto-provision** Postgres `**users`** + personal **org** + **Inbox** collection from the JWT `sub`. Protected examples: `**/api/v1/documents`**, `**/api/v1/collections**`, `**/api/v1/users/me**`. See `**[docs/end-user/README.md](docs/end-user/README.md)**` (end-user guide), `**[docs/auth-supabase.md](docs/auth-supabase.md)**`, `**[docs/tenancy-postgres.md](docs/tenancy-postgres.md)**`, `**[docs/accounts-and-collections.md](docs/accounts-and-collections.md)**` (short pointer), `**[supabase/README.md](supabase/README.md)**`, and `**apps/web/README.md**` for the React/Vite side (`**VITE_API_URL**` enables API-backed dashboard, documents, upload, search, collections, collection analytics, SSE + pipeline polling on upload/dashboard, and `**canonical_score**` on document detail; mock demo when unset).
+- **Supabase session auth (optional)** — FastAPI routes under `**/auth`** (signup, login with **httpOnly** refresh cookie on path `/auth`, refresh, logout, reset email, `**POST /auth/sync-identity`**); JWT validation via **JWKS** or **HS256** (`app/auth/`). Bearer requests can **auto-provision** Postgres `**users`** + personal **org** + **Inbox** collection from the JWT `sub`. Protected examples: `**/api/v1/documents`**, `**/api/v1/collections**`, `**/api/v1/users/me**`. See `**[docs/end-user/README.md](docs/end-user/README.md)**` (end-user guide), `**[docs/auth-supabase.md](docs/auth-supabase.md)**`, `**[docs/tenancy-postgres.md](docs/tenancy-postgres.md)**`, `**[docs/accounts-and-collections.md](docs/accounts-and-collections.md)**` (short pointer), `**[supabase/README.md](supabase/README.md)**`, and `**apps/web/README.md**` for the React/Vite side (`**VITE_API_URL**` enables API-backed dashboard, documents, upload (including **local folder** tree + client-side sync on `/library/upload`), search, collections, collection analytics, SSE + pipeline polling on upload/dashboard, and `**canonical_score**` on document detail; mock demo when unset).
 - **HTTP API** — root package `**app/`**: **FastAPI** (`app/main.py`), `**/api/v1`** routes for **health** (Postgres, Redis, object storage, OpenSearch reachability), info, **Phase 1 document intake** (`POST /api/v1/documents` multipart upload → Postgres + MinIO/S3 + ARQ), **keyword search** (`GET /api/v1/search` over OpenSearch or `**USE_FAKE_OPENSEARCH`** in tests; **Bearer required** by default), **collection analytics** (`GET /api/v1/collections/{id}/analytics` — index facets + Postgres score rollups), **document pipeline status** (`GET /api/v1/documents/{id}/pipeline`), **signed original download** (`GET /api/v1/documents/{id}/file` — presigned redirect or streamed), and **SSE** (`/api/v1/events/stream`; **JWT** via `**Authorization`** or `**?access_token=**` by default). **SQLAlchemy** session factory for Postgres (`app/db/session.py`); JWT validation and dependencies in `**app/auth/dependencies.py`** (Supabase-compatible); `**app/auth/placeholder.py**` is legacy/minimal.
 - **Worker** — root package `**worker/`**: **[ARQ](https://arq-docs.helpmanual.io/)** worker on Redis (`pdm run worker`), `process_document` runs scaffold stages: **ingest** (storage head check), **extract** (PDF/DOCX/plain → `**documents.body_text`** + optional `**extract_artifact_key**` artifact), **enrich** (text stats on `**body_text`** in `**pipeline_events**`), **score** (canonical **heuristic** row in `**document_scores`**, plus optional `**score_document**` job when `**ENQUEUE_SCORE_AFTER_PIPELINE=true**` — **stub** or **HTTP** remote scorer per `**SCORE_ASYNC_BACKEND`** / `**SCORE_HTTP_URL**`, retries + idempotency; see `**[docs/scoring-http.md](docs/scoring-http.md)**`; remote scorer contract: `**[docs/external-scorer-implementation-guide.md](docs/external-scorer-implementation-guide.md)**`), **index** (OpenSearch), **finalize**. See `**[docs/pipeline-stages.md](docs/pipeline-stages.md)`**. **Vector** search and **in-process LLM** calls are still future work; HTTP scoring delegates to **your** model service.
 - **PDM** — `pyproject.toml`, `**pdm.lock`**, scripts: `**pdm run api**` (uvicorn reload), `**pdm run api-prod**`, `**pdm run worker**`, `**pdm run reference-http-scorer**` (minimal FastAPI scorer for `**SCORE_ASYNC_BACKEND=http**` — see `**[docs/scoring-http.md](docs/scoring-http.md)**`), dev group (**pytest**, **ruff**, etc.).
@@ -70,6 +70,55 @@ If you use `**uv**` with the repo’s `**uv.lock**`, keep that lockfile aligned 
    make lint
   ```
    For a **full suite on your machine** (including integration tests against real Postgres), see **[Testing locally](#testing-locally)** below.
+
+## Local development workflow (recommended)
+
+Use **`make dev`** (alias: **`make local`**) for day-to-day work so Postgres, Redis, MinIO, OpenSearch, and OpenSearch Dashboards all come up on the host ports the API expects, then **FastAPI** runs on the host with reload (same env wiring as **`make api-local`**).
+
+### Steps
+
+1. **Once:** `make setup` (dependencies + `.env` from `.env.example` if missing).
+2. **Terminal 1 — API + infra:** from the repo root, run:
+   ```bash
+   make dev
+   ```
+   This runs **`make dev-stack`** (Docker Compose **postgres**, **redis**, **minio**, **opensearch**, **opensearch-dashboards**; waits until each dependency is healthy), then starts **`make api-local`** on **`0.0.0.0:8000`** by default. Health check: `curl -s http://127.0.0.1:8000/api/v1/health | jq`.
+3. **First time only (empty database):** in another terminal, apply schema migrations:
+   ```bash
+   make migrate
+   ```
+   Skip if migrations are already applied (see **`[db/README.md](db/README.md)`** if `001` already exists).
+4. **Supabase auth (`/auth/*`, sign-in in the SPA):** the Makefile does not start the Supabase CLI. When you need local GoTrue, run **`supabase start`** from **`./supabase`** (see **`[supabase/README.md](supabase/README.md)`**). With the API **on the host**, **`SUPABASE_URL`** is typically **`http://127.0.0.1:54321`** (see **`[docs/auth-supabase.md](docs/auth-supabase.md)`** and **`.env.example`**).
+5. **Terminal 2 — Web UI:**
+   ```bash
+   make web-dev
+   ```
+   Open the URL Vite prints (often **`http://127.0.0.1:5173`**). Ensure **`apps/web/.env.local`** sets **`VITE_API_URL`** to your API (e.g. **`http://127.0.0.1:8000`**); **`make web-config`** creates it from **`apps/web/.env.example`** if missing.
+6. **Optional — background jobs:** for URL ingest, pipeline stages, and ARQ queues with a real Redis (not **`USE_FAKE_QUEUE`**), run in another terminal:
+   ```bash
+   pdm run worker
+   ```
+
+### Related Makefile targets
+
+| Command | Purpose |
+| ------- | ------- |
+| **`make dev-stack`** | Infra only + health waits; then run **`make api-local`** yourself when you want the API separate from stack bring-up. |
+| **`make dev-down`** | **`docker compose stop`** on the dev-stack services (keeps volumes; does not stop Compose **app** / **worker** if you use **`make docker-up`**). |
+| **`make api-local`** | Postgres (Compose) + API only. Use after **`make dev-stack`** if Redis / MinIO / OpenSearch were not already running. |
+| **`make api-local-restart LOCAL_API_PG_PORT=5433`** | Frees the API port and restarts **`api-local`**, forwarding **`LOCAL_API_PG_PORT`** / **`LOCAL_API_PORT`** so **`DATABASE_URL`** matches Compose Postgres. |
+
+Override the Postgres host port when **5432** is taken, for example:
+
+```bash
+make dev LOCAL_API_PG_PORT=5433
+```
+
+Whenever you use a non-default Postgres host port, pass the same **`LOCAL_API_PG_PORT`** for **`make dev`**, **`make dev-stack`**, and **`make api-local`** so Compose publishes Postgres on that port and the API’s **`DATABASE_URL`** matches. **`make migrate`** runs **`psql`** inside the Compose **`postgres`** container (no host port in the DSN).
+
+### Alternative: full stack in Docker
+
+To run the **API** and **worker** inside Compose as well, use **`make docker-up`** (builds images; heavier). You still configure **Supabase** for auth (often **`host.docker.internal`** from the **app** container); see **[Web UI against the Docker API](#web-ui-against-the-docker-api)** below.
 
 ## Testing locally
 
@@ -240,6 +289,12 @@ curl -N -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8000/api/v1/events/st
 | `make resources`        | Placeholder for future asset downloads                                                                                                                                               |
 | `make web-config`       | Create `**apps/web/.env.local**` from `**apps/web/.env.example**` if missing (API mode → `**http://127.0.0.1:8000**`)                                                                |
 | `make web-dev`          | Run `**web-config**`, then Vite dev server in `**apps/web**` (install deps with `**npm install**` there first)                                                                       |
+| `make dev-stack`        | Compose: Postgres + Redis + MinIO + OpenSearch + Dashboards; waits until healthy (uses **`LOCAL_API_*`** ports)                                                                     |
+| `make dev`              | **`dev-stack`** then **`make api-local`** (host API with reload; see [Local development workflow](#local-development-workflow-recommended))                                         |
+| `make local`            | Alias for **`make dev`**                                                                                                                                                            |
+| `make dev-down`         | Stop dev-stack services only (volumes kept)                                                                                                                                         |
+| `make api-local`        | Compose Postgres + host FastAPI (use **`dev-stack`** first if Redis / MinIO / OpenSearch are not up)                                                                                |
+| `make api-local-restart` | Kill listener on **`LOCAL_API_PORT`**, then **`api-local`** (forwards **`LOCAL_API_PG_PORT`** / **`LOCAL_API_PORT`**)                                                               |
 
 
 
@@ -326,9 +381,16 @@ Run `make` or `make help` to print this list from the Makefile.
 | `make docker-run`            | `make config`, build image, then one-off `app` container                                                                    |
 | `make web-config`            | Create `**apps/web/.env.local`** from `**apps/web/.env.example**` if missing                                                |
 | `make web-dev`               | `**web-config**`, then `**npm run dev**` in `**apps/web**`                                                                  |
+| `make dev-stack`             | Compose infra (Postgres, Redis, MinIO, OpenSearch, Dashboards) + readiness waits                                            |
+| `make dev` / `make local`    | **`dev-stack`** + host uvicorn (**`api-local`**); recommended daily workflow                                                |
+| `make dev-down`              | **`docker compose stop`** for dev-stack services only                                                                       |
+| `make api-local-postgres`    | Compose Postgres on **`LOCAL_API_PG_PORT`** + **`pg_isready`** wait                                                         |
+| `make api-local`             | **`api-local-postgres`** + **`pdm run`** uvicorn with **`API_LOCAL_ENV`** (127.0.0.1 service URLs)                          |
+| `make api-local-prod`        | Same as **`api-local`** without **`--reload`**                                                                              |
+| `make api-local-restart`     | Free **`LOCAL_API_PORT`**, then **`api-local`** (forwards **`LOCAL_API_PG_PORT`**, **`LOCAL_API_PORT`**)                    |
 
 
-Make variables `**PDM**` and `**DOCKER_COMPOSE**` default to `pdm` and `docker compose`; override them if your install paths or Compose wrapper differ.
+Make variables `**PDM**` and `**DOCKER_COMPOSE**` default to `pdm` and `docker compose`; override them if your install paths or Compose wrapper differ. For **`LOCAL_API_PG_PORT`**, **`LOCAL_API_PORT`**, and other host URLs, see **`[Makefile](Makefile)`** comments and [Local development workflow](#local-development-workflow-recommended).
 
 ## PDM without Make
 

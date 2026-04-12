@@ -152,3 +152,47 @@ def test_intake_flow_api_db_queue(intake_api_client, database_url: str):
         ).fetchone()[0]
     assert n == 1
     assert any(j[2] == did and j[1] == "process_document" for j in get_memory_queue().jobs)
+
+
+@pytest.mark.integration
+def test_multipart_uploads_with_nested_path_titles(intake_api_client, database_url: str):
+    """Folder-tree style clients send relative paths as title (same API as single file)."""
+    specs: list[tuple[str, bytes, str]] = [
+        ("memo.txt", b"v1", "reports/2024/memo.txt"),
+        ("other.txt", b"v2", "legal/clauses/other.txt"),
+        ("inner.txt", b"v3", "exports/pkg/sub/inner.txt"),
+    ]
+    ids: list[str] = []
+    for filename, body, title in specs:
+        files = {"file": (filename, body, "text/plain")}
+        data = {"title": title}
+        r = intake_api_client.post("/api/v1/documents", files=files, data=data)
+        assert r.status_code == 200, r.text
+        did = r.json()["document_id"]
+        ids.append(did)
+        detail = intake_api_client.get(f"/api/v1/documents/{did}").json()
+        assert detail["title"] == title
+    assert len(set(ids)) == 3
+
+    with psycopg.connect(database_url) as conn:
+        titles: set[str] = set()
+        for did in ids:
+            row = conn.execute(
+                "SELECT title FROM documents WHERE id = %s::uuid",
+                (uuid.UUID(did),),
+            ).fetchone()
+            assert row is not None
+            titles.add(row[0])
+    assert titles == {s[2] for s in specs}
+
+
+@pytest.mark.integration
+def test_multipart_folder_title_persisted_in_postgres(intake_api_client, database_url: str):
+    rel = "corp/handbook/sections/intro.md"
+    files = {"file": ("intro.md", b"# intro", "text/markdown")}
+    r = intake_api_client.post("/api/v1/documents", files=files, data={"title": rel})
+    assert r.status_code == 200, r.text
+    did = uuid.UUID(r.json()["document_id"])
+    with psycopg.connect(database_url) as conn:
+        title = conn.execute("SELECT title FROM documents WHERE id = %s", (did,)).fetchone()[0]
+    assert title == rel

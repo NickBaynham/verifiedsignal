@@ -16,6 +16,7 @@ export default defineConfig({
   expect: { timeout: 15_000 },
   use: {
     baseURL: "http://127.0.0.1:5173",
+    headless: true,
     trace: "on-first-retry",
     video: "retain-on-failure",
   },

@@ -231,6 +231,20 @@ class Settings(BaseSettings):
         validation_alias="VERIFIEDSIGNAL_ARQ_QUEUE",
     )
 
+    # Local dev: create a Supabase Auth user on API startup (development only; requires Supabase).
+    dev_bootstrap_auth_user: bool = Field(
+        default=False,
+        validation_alias="VERIFIEDSIGNAL_DEV_BOOTSTRAP_AUTH_USER",
+    )
+    dev_bootstrap_auth_email: str = Field(
+        default="dev@example.com",
+        validation_alias="VERIFIEDSIGNAL_DEV_BOOTSTRAP_AUTH_EMAIL",
+    )
+    dev_bootstrap_auth_password: str = Field(
+        default="devpassword123",
+        validation_alias="VERIFIEDSIGNAL_DEV_BOOTSTRAP_AUTH_PASSWORD",
+    )
+
     # --- Supabase Auth (leave empty to disable auth HTTP routes / use test overrides) ---
     supabase_url: str = Field(default="", validation_alias="SUPABASE_URL")
     supabase_anon_key: str = Field(default="", validation_alias="SUPABASE_ANON_KEY")
