@@ -215,6 +215,19 @@ class Settings(BaseSettings):
         validation_alias="SCORE_API_PROMOTE_CANONICAL",
     )
 
+    # Log-odds fusion row `verifiedsignal_bayes_v1` (see docs/scoring-bayesian-fusion.md).
+    bayes_fusion_enabled: bool = Field(default=False, validation_alias="BAYES_FUSION_ENABLED")
+    bayes_fusion_prior_ai_prob: float = Field(
+        default=0.15,
+        ge=0.01,
+        le=0.99,
+        validation_alias="BAYES_FUSION_PRIOR_AI_PROB",
+    )
+    bayes_fusion_promote_canonical: bool = Field(
+        default=False,
+        validation_alias="BAYES_FUSION_PROMOTE_CANONICAL",
+    )
+
     @field_validator("score_async_backend", mode="before")
     @classmethod
     def normalize_score_async_backend(cls, v: object) -> str:

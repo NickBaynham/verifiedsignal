@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session
 from app.core.config import Settings, get_settings
 from app.db.models import Document, DocumentScore
 from app.db.session import get_session_factory
+from app.services.bayes_fusion_score import apply_bayes_fusion
 from app.services.score_http_remote import (
     HTTP_SCORER_NAME,
     ScoringPermanentError,
@@ -209,11 +210,13 @@ def _run_score_document(session: Session, document_id: uuid.UUID, *, settings: S
     backend = settings.score_async_backend.strip().lower()
     if backend == "http":
         _run_http_scorer(session, doc, settings)
-        return
+    else:
+        # default: stub
+        _insert_stub_row(
+            session,
+            doc,
+            note="score_async_backend=stub (set to http + SCORE_HTTP_URL for remote API scoring)",
+        )
 
-    # default: stub
-    _insert_stub_row(
-        session,
-        doc,
-        note="score_async_backend=stub (set to http + SCORE_HTTP_URL for remote API scoring)",
-    )
+    session.flush()
+    apply_bayes_fusion(session, doc, settings=settings)

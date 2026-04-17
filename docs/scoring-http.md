@@ -83,11 +83,11 @@ Stub rows use **`kind: stub`**, **`job_status: completed`**, and **`note`**.
 3. **On-prem / Hugging Face** — Run a sidecar HTTP service (transformers + GPU) exposing this contract; keeps the app worker thin and testable.  
 4. **Batch / queue** — For large corpora, enqueue scoring jobs with **`content_fingerprint`** only and let an external batch system callback or poll (still use the same persistence model).
 
-## Planned: Bayesian fusion (~next week)
+## Bayesian fusion (design + implementation slice)
 
-**Goal:** Combine multiple weak signals into a single interpretable probability (e.g. P(synthetic \| evidence)) using **Bayes’ rule** — start from a **prior** (collection-wide or global base rate), multiply in **likelihood ratios** from the pipeline heuristic, HTTP scorer output, and future features (metadata, extract stats), then normalize. Implementation options: log-odds accumulation, naive Bayes over discretized bins, or a small “fusion” row in **`document_scores`** with **`scorer_name`** like **`verifiedsignal_bayes_v1`** and full working detail in **`score_payload`**.
+**Design (v1):** **[`scoring-bayesian-fusion.md`](scoring-bayesian-fusion.md)** — binary event \(H_1\) = “synthetic-like”, **log-odds naïve Bayes** over **heuristic** + optional **HTTP** **`ai_generation_probability`**, configurable **prior** **`BAYES_FUSION_PRIOR_AI_PROB`**, new row **`verifiedsignal_bayes_v1`**, **`score_payload`** audit trace, idempotency, optional **`BAYES_FUSION_PROMOTE_CANONICAL`**.
 
-**Dependencies:** Define labels (e.g. synthetic vs human), choose priors, and decide whether HTTP scorers return **calibrated** probabilities or raw scores that we map to likelihoods. This is a design + incremental PR sequence, not a drop-in one-liner.
+**Dependencies:** HTTP scorers should aim for **calibrated** **`ai_generation_probability`** (see **[`external-scorer-implementation-guide.md`](external-scorer-implementation-guide.md)**); heuristic remains a **rough** proxy — fusion **`score_payload.warnings`** documents miscalibration risk until a calibration layer ships.
 
 ## Reference HTTP scorer (copy-paste local test)
 
@@ -126,5 +126,5 @@ Implementation: **`scripts/reference_http_scorer/app.py`**. Unit smoke tests: **
 
 ## Tests
 
-- **Unit:** `tests/unit/test_score_http_remote.py`, `tests/unit/test_reference_http_scorer_app.py`  
-- **Integration (Postgres + mocked HTTP):** `tests/integration/test_score_http_worker.py`
+- **Unit:** `tests/unit/test_score_http_remote.py`, `tests/unit/test_reference_http_scorer_app.py`, `tests/unit/test_bayes_fusion_score.py`  
+- **Integration (Postgres + mocked HTTP):** `tests/integration/test_score_http_worker.py` (includes **`BAYES_FUSION_ENABLED`** fusion row + idempotency when Postgres is available)
