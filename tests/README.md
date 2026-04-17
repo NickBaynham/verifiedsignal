@@ -4,7 +4,7 @@ Pytest is organized by **markers** (see `pyproject.toml`):
 
 | Marker | Scope | Requirements |
 |--------|--------|----------------|
-| **`unit`** | CLI, package metadata, migrations on disk, worker pipeline sim, event hub, document queue, **HTTP scorer parsing** (`test_score_http_remote.py`), **reference HTTP scorer** (`test_reference_http_scorer_app.py`), **SSE tenancy filter** (`test_sse_tenancy.py`) | None |
+| **`unit`** | CLI, package metadata, migrations on disk, worker pipeline sim, event hub, document queue, **HTTP scorer parsing** (`test_score_http_remote.py`), **reference HTTP scorer** (`test_reference_http_scorer_app.py`), **SSE tenancy filter** (`test_sse_tenancy.py`), **MCP server** (`tests/mcp/`) | None |
 | **`integration`** | Postgres schema, **document intake** (`test_document_intake.py`), **search pipeline** (`test_search_pipeline.py`), **pipeline + analytics HTTP** (`test_pipeline_and_analytics_api.py`), **async HTTP scorer** (`test_score_http_worker.py`), **search/SSE auth defaults** (`test_auth_search_sse.py`), **collection CRUD** (`test_collection_mutations.py` — `intake_api_client` + optional `psycopg` seed for org membership), **document move/copy** (`test_document_collection_transfer.py`), or FastAPI routes (stubbed DB health + fake queue/storage/OpenSearch via `api_client`) | Intake + schema: **`DATABASE_URL`** + migrations **001–005**. `api_client` tests: none (fixture stubs infra). |
 | **`e2e`** | `docker compose config` + ASGI smoke (`test_api_http`) | **`docker`** on `PATH` for compose test only |
 | **`api`** | ASGI smoke (`TestClient`, multi-route) | None |
@@ -22,7 +22,7 @@ make ci-local             # like CI: Ruff + pytest with --cov=app/services (need
 
 ## Integration tests and Postgres
 
-Schema integration tests (`test_schema_*.py`) connect with **`psycopg`** using **`DATABASE_URL`**. They **do not** apply migrations; your pipeline (or you locally) must run the SQL in `db/migrations/` first (**001** through **005**).
+Schema integration tests (`test_schema_*.py`) connect with **`psycopg`** using **`DATABASE_URL`**. They **do not** apply migrations; your pipeline (or you locally) must run the SQL in `db/migrations/` first (**001** through **006** when knowledge models are used).
 
 **Intake** integration tests (`test_document_intake.py`) use the **`intake_api_client`** fixture: real Postgres, **`USE_FAKE_QUEUE=true`**, **`USE_FAKE_EVENT_HUB=true`**, **`USE_FAKE_STORAGE=true`** (in-memory S3 stand-in), full multipart **`POST /api/v1/documents`** flow.
 

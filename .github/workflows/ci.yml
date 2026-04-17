@@ -75,7 +75,7 @@ jobs:
           psql -c "SELECT 1"
 
       - name: Ruff
-        run: pdm run python -m ruff check src tests app worker scripts
+        run: pdm run python -m ruff check src tests app worker scripts mcp_server
 
       - name: Tests
         run: |

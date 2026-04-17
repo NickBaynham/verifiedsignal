@@ -5,7 +5,8 @@ import { ApiError } from "../api/http";
 import type { CollectionDocumentItem, KnowledgeModelTypeId } from "../api/types";
 import { KNOWLEDGE_MODEL_TYPE_OPTIONS } from "../lib/knowledgeModelUi";
 
-const DOC_PAGE_SIZE = 500;
+// Backend currently validates list limits at <= 200.
+const DOC_PAGE_SIZE = 200;
 
 export interface CreateKnowledgeModelWizardProps {
   open: boolean;
