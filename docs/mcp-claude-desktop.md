@@ -109,8 +109,7 @@ FastMCP exposes **one static resource** (`verifiedsignal://collections`) plus **
 - `get_model_summary` (`model_id`, `version_id` optional)
 - `search_model` (`model_id`, `query`, `version_id` optional) — **V1 placeholder** (substring over `summary_json` + asset titles)
 - `compare_model_versions` (`model_id`, `left_version_id`, `right_version_id`)
-
-No mutation / write-back tools in V1.
+- **Write-back (via REST):** `list_writebacks`, `get_writeback`, `list_model_activity`, `write_finding`, `write_risk`, `write_test_artifact`, `write_execution_result`, `write_evidence_note`, `write_contradiction` — MCP tools default to **`origin_type=agent`** and **`verification_state=proposed`** (see **[`docs/model-writeback.md`](model-writeback.md)**).
 
 ### Prompts
 
@@ -125,6 +124,7 @@ No mutation / write-back tools in V1.
 - “Summarize the latest version of model `{uuid}` with summarize_model / get_model_summary.”
 - “Design tests from the Test Knowledge model `{uuid}` with a focus on refunds.”
 - “Compare version 1 and version 2 of model `{uuid}` with compare_model_versions.”
+- “Add a proposed finding to model `{uuid}` with write_finding.”
 
 ## Troubleshooting
 
@@ -138,7 +138,7 @@ No mutation / write-back tools in V1.
 - **search_model** is a placeholder; replace with dedicated model-aware retrieval when the backend supports it.
 - **Transport**: stdio only for local Claude Desktop; remote/streamable HTTP can be added later.
 - **Auth**: long-lived token in env; future OAuth / rotating tokens can wrap the HTTP client.
-- **Write-back** tools (risks, test artifacts) are intentionally out of scope until governed APIs exist.
+- **Write-back**: agent proposals require human review in-app for **accept/reject**; richer reviewer roles and bulk workflows are future work.
 
 ## Smoke test
 

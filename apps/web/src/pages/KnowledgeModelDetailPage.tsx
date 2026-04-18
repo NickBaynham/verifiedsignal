@@ -5,17 +5,30 @@ import {
   listKnowledgeModelVersionAssets,
   listKnowledgeModelVersions,
 } from "../api/knowledgeModels";
+import {
+  createModelFinding,
+  fetchModelActivity,
+  listModelWritebacks,
+  patchWritebackVerification,
+} from "../api/modelWritebacks";
 import { ApiError } from "../api/http";
-import type { KnowledgeModelAsset, KnowledgeModelDetail, KnowledgeModelVersion } from "../api/types";
+import type {
+  KnowledgeModelAsset,
+  KnowledgeModelDetail,
+  KnowledgeModelVersion,
+  ModelActivityItem,
+  ModelWriteback,
+} from "../api/types";
 import { isApiBackend } from "../config";
 import { useAuth } from "../context/AuthContext";
 import { knowledgeModelTypeLabel } from "../lib/knowledgeModelUi";
-import { statusBadgeClass } from "../lib/statusBadge";
+import { statusBadgeClass, writebackVerificationBadgeClass } from "../lib/statusBadge";
 
-type DetailView = "overview" | "versions" | "documents";
+type DetailView = "overview" | "versions" | "documents" | "writeback" | "activity";
 
 function parseView(raw: string | null): DetailView {
-  if (raw === "versions" || raw === "documents") return raw;
+  if (raw === "versions" || raw === "documents" || raw === "writeback" || raw === "activity")
+    return raw;
   return "overview";
 }
 
@@ -46,6 +59,21 @@ export function KnowledgeModelDetailPage() {
   const [assets, setAssets] = useState<KnowledgeModelAsset[] | null>(null);
   const [assetsError, setAssetsError] = useState<string | null>(null);
   const [assetsLoading, setAssetsLoading] = useState(false);
+
+  const [writebacks, setWritebacks] = useState<ModelWriteback[] | null>(null);
+  const [writebacksError, setWritebacksError] = useState<string | null>(null);
+  const [writebacksLoading, setWritebacksLoading] = useState(false);
+  const [kindFilter, setKindFilter] = useState<string>("");
+  const [verificationFilter, setVerificationFilter] = useState<string>("");
+  const [newTitle, setNewTitle] = useState("");
+  const [newDetails, setNewDetails] = useState("");
+  const [createBusy, setCreateBusy] = useState(false);
+  const [createFeedback, setCreateFeedback] = useState<string | null>(null);
+  const [writebackRefresh, setWritebackRefresh] = useState(0);
+
+  const [activityItems, setActivityItems] = useState<ModelActivityItem[] | null>(null);
+  const [activityError, setActivityError] = useState<string | null>(null);
+  const [activityLoading, setActivityLoading] = useState(false);
 
   const setView = useCallback(
     (next: DetailView) => {
@@ -139,6 +167,56 @@ export function KnowledgeModelDetailPage() {
     };
   }, [api, accessToken, modelId, selectedVersionId, view]);
 
+  useEffect(() => {
+    if (!api || !accessToken || !modelId || view !== "writeback") return;
+    let cancelled = false;
+    setWritebacksLoading(true);
+    setWritebacksError(null);
+    void listModelWritebacks(accessToken, modelId, {
+      artifact_kind: kindFilter || undefined,
+      verification_state: verificationFilter || undefined,
+      limit: 100,
+    })
+      .then((r) => {
+        if (!cancelled) setWritebacks(r.items);
+      })
+      .catch((e) => {
+        if (!cancelled) {
+          setWritebacks(null);
+          setWritebacksError(e instanceof ApiError ? e.message : "Failed to load write-backs");
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setWritebacksLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [api, accessToken, modelId, view, kindFilter, verificationFilter, writebackRefresh]);
+
+  useEffect(() => {
+    if (!api || !accessToken || !modelId || view !== "activity") return;
+    let cancelled = false;
+    setActivityLoading(true);
+    setActivityError(null);
+    void fetchModelActivity(accessToken, modelId)
+      .then((r) => {
+        if (!cancelled) setActivityItems(r.items);
+      })
+      .catch((e) => {
+        if (!cancelled) {
+          setActivityItems(null);
+          setActivityError(e instanceof ApiError ? e.message : "Failed to load activity");
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setActivityLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [api, accessToken, modelId, view]);
+
   if (!modelId) {
     return (
       <>
@@ -228,6 +306,8 @@ export function KnowledgeModelDetailPage() {
             ["overview", "Overview"],
             ["versions", "Versions"],
             ["documents", "Included documents"],
+            ["writeback", "Write-back"],
+            ["activity", "Activity"],
           ] as const
         ).map(([key, label]) => (
           <button
@@ -364,6 +444,226 @@ export function KnowledgeModelDetailPage() {
                     {a.inclusion_reason ? `${a.inclusion_reason} · ` : null}
                     added {new Date(a.created_at).toLocaleString()}
                   </div>
+                </li>
+              ))}
+            </ul>
+          ) : null}
+        </section>
+      ) : null}
+
+      {view === "writeback" ? (
+        <section className="card" style={{ padding: "1rem" }}>
+          <h2 style={{ marginTop: 0, fontSize: "1rem" }}>Write-back</h2>
+          <p style={{ color: "var(--text-muted)", fontSize: "0.9rem" }}>
+            Findings, risks, and other artifacts stored in Postgres. New entries default to{" "}
+            <strong>proposed</strong> until reviewed.
+          </p>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 12, marginBottom: "1rem" }}>
+            <label style={{ fontSize: "0.85rem" }}>
+              Type{" "}
+              <select
+                value={kindFilter}
+                onChange={(e) => setKindFilter(e.target.value)}
+                style={{
+                  marginLeft: 6,
+                  padding: "0.35rem 0.5rem",
+                  borderRadius: 6,
+                  border: "1px solid var(--border)",
+                  background: "var(--bg-elevated)",
+                  color: "var(--text)",
+                }}
+              >
+                <option value="">All</option>
+                <option value="finding">finding</option>
+                <option value="risk">risk</option>
+                <option value="test_artifact">test_artifact</option>
+                <option value="execution_result">execution_result</option>
+                <option value="evidence_note">evidence_note</option>
+                <option value="contradiction">contradiction</option>
+              </select>
+            </label>
+            <label style={{ fontSize: "0.85rem" }}>
+              Verification{" "}
+              <select
+                value={verificationFilter}
+                onChange={(e) => setVerificationFilter(e.target.value)}
+                style={{
+                  marginLeft: 6,
+                  padding: "0.35rem 0.5rem",
+                  borderRadius: 6,
+                  border: "1px solid var(--border)",
+                  background: "var(--bg-elevated)",
+                  color: "var(--text)",
+                }}
+              >
+                <option value="">All</option>
+                <option value="proposed">proposed</option>
+                <option value="accepted">accepted</option>
+                <option value="rejected">rejected</option>
+                <option value="auto_ingested">auto_ingested</option>
+                <option value="superseded">superseded</option>
+              </select>
+            </label>
+          </div>
+          {writebacksError ? <p className="error-text">{writebacksError}</p> : null}
+          {writebacksLoading ? <p className="page-sub">Loading…</p> : null}
+          {writebacks && writebacks.length === 0 && !writebacksLoading ? (
+            <p className="page-sub">No artifacts match the filters.</p>
+          ) : null}
+          {writebacks && writebacks.length > 0 ? (
+            <ul style={{ listStyle: "none", padding: 0, margin: "0 0 1.25rem" }}>
+              {writebacks.map((w) => (
+                <li
+                  key={w.id}
+                  style={{
+                    borderBottom: "1px solid var(--border)",
+                    padding: "0.65rem 0",
+                    fontSize: "0.9rem",
+                  }}
+                >
+                  <div style={{ fontWeight: 600 }}>{w.title}</div>
+                  <div style={{ marginTop: 6, display: "flex", flexWrap: "wrap", gap: 8 }}>
+                    <span className="vs-badge">{w.artifact_kind}</span>
+                    <span className={writebackVerificationBadgeClass(w.verification_state)}>
+                      {w.verification_state}
+                    </span>
+                    <span className="vs-badge">{w.origin_type}</span>
+                  </div>
+                  {w.summary ? (
+                    <div style={{ color: "var(--text-muted)", marginTop: 6 }}>{w.summary}</div>
+                  ) : null}
+                  <div style={{ marginTop: 8, display: "flex", gap: 8, flexWrap: "wrap" }}>
+                    {w.verification_state === "proposed" ? (
+                      <>
+                        <button
+                          type="button"
+                          className="btn btn-primary"
+                          onClick={() => {
+                            if (!accessToken || !modelId) return;
+                            void patchWritebackVerification(accessToken, modelId, w.id, {
+                              verification_state: "accepted",
+                            })
+                              .then(() => setWritebackRefresh((x) => x + 1))
+                              .catch((e) =>
+                                setCreateFeedback(
+                                  e instanceof ApiError ? e.message : "Review update failed",
+                                ),
+                              );
+                          }}
+                        >
+                          Accept
+                        </button>
+                        <button
+                          type="button"
+                          className="btn"
+                          onClick={() => {
+                            if (!accessToken || !modelId) return;
+                            void patchWritebackVerification(accessToken, modelId, w.id, {
+                              verification_state: "rejected",
+                            })
+                              .then(() => setWritebackRefresh((x) => x + 1))
+                              .catch((e) =>
+                                setCreateFeedback(
+                                  e instanceof ApiError ? e.message : "Review update failed",
+                                ),
+                              );
+                          }}
+                        >
+                          Reject
+                        </button>
+                      </>
+                    ) : null}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          ) : null}
+
+          <h3 style={{ fontSize: "0.95rem" }}>Add finding</h3>
+          {createFeedback ? <p className="error-text">{createFeedback}</p> : null}
+          <div style={{ display: "flex", flexDirection: "column", gap: 8, maxWidth: 480 }}>
+            <input
+              type="text"
+              placeholder="Title"
+              value={newTitle}
+              onChange={(e) => setNewTitle(e.target.value)}
+              style={{
+                padding: "0.5rem 0.65rem",
+                borderRadius: 6,
+                border: "1px solid var(--border)",
+                background: "var(--bg-elevated)",
+                color: "var(--text)",
+              }}
+            />
+            <textarea
+              placeholder="Details (optional)"
+              value={newDetails}
+              onChange={(e) => setNewDetails(e.target.value)}
+              rows={3}
+              style={{
+                padding: "0.5rem 0.65rem",
+                borderRadius: 6,
+                border: "1px solid var(--border)",
+                background: "var(--bg-elevated)",
+                color: "var(--text)",
+              }}
+            />
+            <button
+              type="button"
+              className="btn btn-primary"
+              disabled={createBusy || !newTitle.trim()}
+              onClick={() => {
+                if (!accessToken || !modelId) return;
+                setCreateBusy(true);
+                setCreateFeedback(null);
+                void createModelFinding(accessToken, modelId, {
+                  title: newTitle.trim(),
+                  details: newDetails.trim() || null,
+                  model_version_id: selectedVersionId,
+                })
+                  .then(() => {
+                    setNewTitle("");
+                    setNewDetails("");
+                    setWritebackRefresh((x) => x + 1);
+                  })
+                  .catch((e) =>
+                    setCreateFeedback(e instanceof ApiError ? e.message : "Create failed"),
+                  )
+                  .finally(() => setCreateBusy(false));
+              }}
+            >
+              {createBusy ? "Saving…" : "Save finding"}
+            </button>
+          </div>
+        </section>
+      ) : null}
+
+      {view === "activity" ? (
+        <section className="card" style={{ padding: "1rem" }}>
+          <h2 style={{ marginTop: 0, fontSize: "1rem" }}>Activity</h2>
+          {activityError ? <p className="error-text">{activityError}</p> : null}
+          {activityLoading ? <p className="page-sub">Loading…</p> : null}
+          {activityItems && activityItems.length === 0 && !activityLoading ? (
+            <p className="page-sub">No activity.</p>
+          ) : null}
+          {activityItems && activityItems.length > 0 ? (
+            <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
+              {activityItems.map((a) => (
+                <li
+                  key={a.id}
+                  style={{
+                    borderBottom: "1px solid var(--border)",
+                    padding: "0.65rem 0",
+                    fontSize: "0.9rem",
+                  }}
+                >
+                  <div style={{ color: "var(--text-muted)", fontSize: "0.8rem" }}>
+                    {new Date(a.occurred_at).toLocaleString()} · {a.event_type}
+                  </div>
+                  <div style={{ fontWeight: 600, marginTop: 4 }}>{a.title}</div>
+                  {a.summary ? (
+                    <div style={{ color: "var(--text-muted)", marginTop: 4 }}>{a.summary}</div>
+                  ) : null}
                 </li>
               ))}
             </ul>

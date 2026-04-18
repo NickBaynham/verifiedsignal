@@ -114,3 +114,241 @@ def compare_model_versions(
         }
     except Exception as e:
         return _tool_error(e)
+
+
+@mcp.tool()
+def list_writebacks(
+    model_id: str,
+    artifact_kind: str | None = None,
+    verification_state: str | None = None,
+    version_id: str | None = None,
+    limit: int = 100,
+    offset: int = 0,
+) -> dict[str, Any]:
+    """List write-back artifacts for a model (filter by kind, verification, version)."""
+    try:
+        return {
+            "ok": True,
+            "data": get_adapter().list_writebacks(
+                model_id,
+                artifact_kind=artifact_kind,
+                verification_state=verification_state,
+                version_id=version_id,
+                limit=limit,
+                offset=offset,
+            ),
+        }
+    except Exception as e:
+        return _tool_error(e)
+
+
+@mcp.tool()
+def get_writeback(model_id: str, writeback_id: str) -> dict[str, Any]:
+    """Fetch a single write-back artifact."""
+    try:
+        return {"ok": True, "data": get_adapter().get_writeback(model_id, writeback_id)}
+    except Exception as e:
+        return _tool_error(e)
+
+
+@mcp.tool()
+def list_model_activity(model_id: str) -> dict[str, Any]:
+    """Unified timeline: model creation, versions, builds, write-backs, verification events."""
+    try:
+        return {"ok": True, "data": get_adapter().list_model_activity(model_id)}
+    except Exception as e:
+        return _tool_error(e)
+
+
+@mcp.tool()
+def write_finding(
+    model_id: str,
+    title: str,
+    model_version_id: str | None = None,
+    summary: str | None = None,
+    details: str | None = None,
+    confidence_score: float | None = None,
+    related_document_id: str | None = None,
+    related_asset_id: str | None = None,
+    agent_origin_id: str | None = None,
+) -> dict[str, Any]:
+    """Add a finding (provenance=agent, verification=proposed unless overridden server-side)."""
+    try:
+        return {
+            "ok": True,
+            "data": get_adapter().write_finding(
+                model_id,
+                title,
+                model_version_id=model_version_id,
+                summary=summary,
+                details=details,
+                confidence_score=confidence_score,
+                related_document_id=related_document_id,
+                related_asset_id=related_asset_id,
+                agent_origin_id=agent_origin_id,
+            ),
+        }
+    except Exception as e:
+        return _tool_error(e)
+
+
+@mcp.tool()
+def write_risk(
+    model_id: str,
+    title: str,
+    model_version_id: str | None = None,
+    details: str | None = None,
+    severity: str | None = None,
+    likelihood: str | None = None,
+    summary: str | None = None,
+    related_document_id: str | None = None,
+    related_asset_id: str | None = None,
+    agent_origin_id: str | None = None,
+) -> dict[str, Any]:
+    """Record a risk on the model."""
+    try:
+        return {
+            "ok": True,
+            "data": get_adapter().write_risk(
+                model_id,
+                title,
+                model_version_id=model_version_id,
+                details=details,
+                severity=severity,
+                likelihood=likelihood,
+                summary=summary,
+                related_document_id=related_document_id,
+                related_asset_id=related_asset_id,
+                agent_origin_id=agent_origin_id,
+            ),
+        }
+    except Exception as e:
+        return _tool_error(e)
+
+
+@mcp.tool()
+def write_test_artifact(
+    model_id: str,
+    artifact_subtype: str,
+    title: str,
+    model_version_id: str | None = None,
+    content: str | None = None,
+    summary: str | None = None,
+    related_document_id: str | None = None,
+    related_asset_id: str | None = None,
+    related_risk_id: str | None = None,
+    agent_origin_id: str | None = None,
+) -> dict[str, Any]:
+    """Attach a test scenario, case, script reference, or coverage note."""
+    try:
+        return {
+            "ok": True,
+            "data": get_adapter().write_test_artifact(
+                model_id,
+                artifact_subtype,
+                title,
+                model_version_id=model_version_id,
+                content=content,
+                summary=summary,
+                related_document_id=related_document_id,
+                related_asset_id=related_asset_id,
+                related_risk_id=related_risk_id,
+                agent_origin_id=agent_origin_id,
+            ),
+        }
+    except Exception as e:
+        return _tool_error(e)
+
+
+@mcp.tool()
+def write_execution_result(
+    model_id: str,
+    title: str,
+    status: str,
+    model_version_id: str | None = None,
+    summary: str | None = None,
+    details: str | None = None,
+    related_test_artifact_id: str | None = None,
+    related_document_id: str | None = None,
+    related_asset_id: str | None = None,
+    agent_origin_id: str | None = None,
+) -> dict[str, Any]:
+    """Record a test execution outcome (passed/failed/skipped/error/running/unknown)."""
+    try:
+        return {
+            "ok": True,
+            "data": get_adapter().write_execution_result(
+                model_id,
+                title,
+                status,
+                model_version_id=model_version_id,
+                summary=summary,
+                details=details,
+                related_test_artifact_id=related_test_artifact_id,
+                related_document_id=related_document_id,
+                related_asset_id=related_asset_id,
+                agent_origin_id=agent_origin_id,
+            ),
+        }
+    except Exception as e:
+        return _tool_error(e)
+
+
+@mcp.tool()
+def write_evidence_note(
+    model_id: str,
+    title: str,
+    model_version_id: str | None = None,
+    details: str | None = None,
+    summary: str | None = None,
+    related_document_id: str | None = None,
+    related_asset_id: str | None = None,
+    agent_origin_id: str | None = None,
+) -> dict[str, Any]:
+    """Add supplemental evidence or citation context."""
+    try:
+        return {
+            "ok": True,
+            "data": get_adapter().write_evidence_note(
+                model_id,
+                title,
+                model_version_id=model_version_id,
+                details=details,
+                summary=summary,
+                related_document_id=related_document_id,
+                related_asset_id=related_asset_id,
+                agent_origin_id=agent_origin_id,
+            ),
+        }
+    except Exception as e:
+        return _tool_error(e)
+
+
+@mcp.tool()
+def write_contradiction(
+    model_id: str,
+    title: str,
+    model_version_id: str | None = None,
+    details: str | None = None,
+    summary: str | None = None,
+    related_document_id: str | None = None,
+    related_asset_id: str | None = None,
+    agent_origin_id: str | None = None,
+) -> dict[str, Any]:
+    """Record a contradiction between sources or behaviors."""
+    try:
+        return {
+            "ok": True,
+            "data": get_adapter().write_contradiction(
+                model_id,
+                title,
+                model_version_id=model_version_id,
+                details=details,
+                summary=summary,
+                related_document_id=related_document_id,
+                related_asset_id=related_asset_id,
+                agent_origin_id=agent_origin_id,
+            ),
+        }
+    except Exception as e:
+        return _tool_error(e)

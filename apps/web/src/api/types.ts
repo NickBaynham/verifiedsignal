@@ -294,3 +294,71 @@ export interface KnowledgeModelCreateResponse {
   version: KnowledgeModelVersion;
   build_job_id: string | null;
 }
+
+export type ModelWritebackKind =
+  | "finding"
+  | "risk"
+  | "test_artifact"
+  | "execution_result"
+  | "evidence_note"
+  | "contradiction";
+
+export type ModelWritebackVerification =
+  | "proposed"
+  | "accepted"
+  | "rejected"
+  | "auto_ingested"
+  | "superseded";
+
+export interface ModelWriteback {
+  id: string;
+  knowledge_model_id: string;
+  knowledge_model_version_id: string | null;
+  artifact_kind: ModelWritebackKind;
+  title: string;
+  summary: string | null;
+  payload_json: Record<string, unknown>;
+  origin_type: string;
+  origin_id: string | null;
+  verification_state: ModelWritebackVerification;
+  confidence_score: number | null;
+  reviewer_id: string | null;
+  reviewed_at: string | null;
+  review_note: string | null;
+  supersedes_id: string | null;
+  related_document_id: string | null;
+  related_asset_id: string | null;
+  related_writeback_id: string | null;
+  related_entity_id: string | null;
+  related_claim_id: string | null;
+  evidence_refs_json: unknown[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ModelWritebackListResponse {
+  items: ModelWriteback[];
+  knowledge_model_id: string;
+  limit: number;
+  offset: number;
+}
+
+export interface ModelActivityItem {
+  id: string;
+  occurred_at: string;
+  event_type: string;
+  title: string;
+  summary?: string | null;
+  knowledge_model_version_id?: string | null;
+  artifact_kind?: string | null;
+  artifact_id?: string | null;
+  verification_state?: string | null;
+  origin_type?: string | null;
+  origin_id?: string | null;
+  payload: Record<string, unknown>;
+}
+
+export interface ModelActivityResponse {
+  items: ModelActivityItem[];
+  knowledge_model_id: string;
+}

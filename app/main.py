@@ -20,6 +20,7 @@ from app.api.routes import (
     health,
     info,
     knowledge_models,
+    model_writebacks,
     search,
     session_auth,
     users_api,
@@ -132,6 +133,7 @@ def create_app() -> FastAPI:
     application.include_router(documents.router, prefix=v1)
     application.include_router(collections.router, prefix=v1)
     application.include_router(knowledge_models.router, prefix=v1)
+    application.include_router(model_writebacks.router, prefix=v1)
     application.include_router(users_api.router, prefix=v1)
     application.include_router(search.router, prefix=v1)
     application.include_router(events.router, prefix=v1)

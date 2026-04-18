@@ -1,4 +1,4 @@
-.PHONY: help setup lock sync install install-supabase test test-unit test-integration test-e2e test-api lint format clean config resources docker-build docker-up docker-down docker-test docker-run web-config web-dev dev dev-stack dev-down local api-local-postgres api-local api-local-prod api-local-restart migrate migrate-002 migrate-003 migrate-004 migrate-005 migrate-006 migrate-reset ci-local ci-local-stop ci-local-postgres ci-local-migrate-sql ci-local-migrate
+.PHONY: help setup lock sync install install-supabase test test-unit test-integration test-e2e test-api lint format clean config resources docker-build docker-up docker-down docker-test docker-run web-config web-dev dev dev-stack dev-down local api-local-postgres api-local api-local-prod api-local-restart migrate migrate-002 migrate-003 migrate-004 migrate-005 migrate-006 migrate-007 migrate-reset ci-local ci-local-stop ci-local-postgres ci-local-migrate-sql ci-local-migrate
 
 # Default Python / PDM (override if needed)
 PYTHON ?= python3
@@ -76,7 +76,8 @@ help:
 	@echo "  make migrate-004    Apply only 004 (extract_artifact_key; when 001–003 already applied)"
 	@echo "  make migrate-005    Apply only 005 (user_metadata; when 001–004 already applied)"
 	@echo "  make migrate-006    Apply only 006 (knowledge models; when 001–005 already applied)"
-	@echo "  make migrate-reset  Drop app schema + re-apply 001–006 (dev only; needs MIGRATE_RESET_OK=1)"
+	@echo "  make migrate-007    Apply only 007 (model write-backs; when 001–006 already applied)"
+	@echo "  make migrate-reset  Drop app schema + re-apply 001–007 (dev only; needs MIGRATE_RESET_OK=1)"
 	@echo "  make api-local-postgres  docker compose up -d postgres (POSTGRES_PORT=LOCAL_API_PG_PORT) + wait for pg_isready"
 	@echo "  make api-local      Postgres + FastAPI on host (for Redis/MinIO/OpenSearch use make dev-stack first, or make dev)"
 	@echo "  make api-local-prod Same as api-local without --reload"
@@ -241,6 +242,7 @@ migrate:
 	$(DOCKER_COMPOSE) exec -T $(COMPOSE_POSTGRES_SERVICE) psql -U $(COMPOSE_DB_USER) -d $(COMPOSE_DB_NAME) -v ON_ERROR_STOP=1 < db/migrations/004_document_extract_artifact.up.sql
 	$(DOCKER_COMPOSE) exec -T $(COMPOSE_POSTGRES_SERVICE) psql -U $(COMPOSE_DB_USER) -d $(COMPOSE_DB_NAME) -v ON_ERROR_STOP=1 < db/migrations/005_documents_user_metadata.up.sql
 	$(DOCKER_COMPOSE) exec -T $(COMPOSE_POSTGRES_SERVICE) psql -U $(COMPOSE_DB_USER) -d $(COMPOSE_DB_NAME) -v ON_ERROR_STOP=1 < db/migrations/006_knowledge_models.up.sql
+	$(DOCKER_COMPOSE) exec -T $(COMPOSE_POSTGRES_SERVICE) psql -U $(COMPOSE_DB_USER) -d $(COMPOSE_DB_NAME) -v ON_ERROR_STOP=1 < db/migrations/007_model_writebacks.up.sql
 
 migrate-002:
 	$(DOCKER_COMPOSE) exec -T $(COMPOSE_POSTGRES_SERVICE) psql -U $(COMPOSE_DB_USER) -d $(COMPOSE_DB_NAME) -v ON_ERROR_STOP=1 < db/migrations/002_intake_document_fields.up.sql
@@ -257,8 +259,12 @@ migrate-005:
 migrate-006:
 	$(DOCKER_COMPOSE) exec -T $(COMPOSE_POSTGRES_SERVICE) psql -U $(COMPOSE_DB_USER) -d $(COMPOSE_DB_NAME) -v ON_ERROR_STOP=1 < db/migrations/006_knowledge_models.up.sql
 
+migrate-007:
+	$(DOCKER_COMPOSE) exec -T $(COMPOSE_POSTGRES_SERVICE) psql -U $(COMPOSE_DB_USER) -d $(COMPOSE_DB_NAME) -v ON_ERROR_STOP=1 < db/migrations/007_model_writebacks.up.sql
+
 migrate-reset:
 ifeq ($(MIGRATE_RESET_OK),1)
+	$(DOCKER_COMPOSE) exec -T $(COMPOSE_POSTGRES_SERVICE) psql -U $(COMPOSE_DB_USER) -d $(COMPOSE_DB_NAME) -v ON_ERROR_STOP=1 < db/migrations/007_model_writebacks.down.sql
 	$(DOCKER_COMPOSE) exec -T $(COMPOSE_POSTGRES_SERVICE) psql -U $(COMPOSE_DB_USER) -d $(COMPOSE_DB_NAME) -v ON_ERROR_STOP=1 < db/migrations/006_knowledge_models.down.sql
 	$(DOCKER_COMPOSE) exec -T $(COMPOSE_POSTGRES_SERVICE) psql -U $(COMPOSE_DB_USER) -d $(COMPOSE_DB_NAME) -v ON_ERROR_STOP=1 < db/migrations/005_documents_user_metadata.down.sql
 	$(DOCKER_COMPOSE) exec -T $(COMPOSE_POSTGRES_SERVICE) psql -U $(COMPOSE_DB_USER) -d $(COMPOSE_DB_NAME) -v ON_ERROR_STOP=1 < db/migrations/004_document_extract_artifact.down.sql
@@ -271,8 +277,9 @@ ifeq ($(MIGRATE_RESET_OK),1)
 	$(DOCKER_COMPOSE) exec -T $(COMPOSE_POSTGRES_SERVICE) psql -U $(COMPOSE_DB_USER) -d $(COMPOSE_DB_NAME) -v ON_ERROR_STOP=1 < db/migrations/004_document_extract_artifact.up.sql
 	$(DOCKER_COMPOSE) exec -T $(COMPOSE_POSTGRES_SERVICE) psql -U $(COMPOSE_DB_USER) -d $(COMPOSE_DB_NAME) -v ON_ERROR_STOP=1 < db/migrations/005_documents_user_metadata.up.sql
 	$(DOCKER_COMPOSE) exec -T $(COMPOSE_POSTGRES_SERVICE) psql -U $(COMPOSE_DB_USER) -d $(COMPOSE_DB_NAME) -v ON_ERROR_STOP=1 < db/migrations/006_knowledge_models.up.sql
+	$(DOCKER_COMPOSE) exec -T $(COMPOSE_POSTGRES_SERVICE) psql -U $(COMPOSE_DB_USER) -d $(COMPOSE_DB_NAME) -v ON_ERROR_STOP=1 < db/migrations/007_model_writebacks.up.sql
 else
-	@echo >&2 "migrate-reset drops all VerifiedSignal tables and data (006 down … 001 down, then 001…006 up)."
+	@echo >&2 "migrate-reset drops all VerifiedSignal tables and data (007 down … 001 down, then 001…007 up)."
 	@echo >&2 "To confirm: make migrate-reset MIGRATE_RESET_OK=1"
 	@exit 1
 endif
@@ -344,6 +351,8 @@ ci-local-migrate-sql:
 		< db/migrations/005_documents_user_metadata.up.sql
 	docker exec -i $(CI_LOCAL_PG_CONTAINER) psql -U verifiedsignal -d verifiedsignal -v ON_ERROR_STOP=1 \
 		< db/migrations/006_knowledge_models.up.sql
+	docker exec -i $(CI_LOCAL_PG_CONTAINER) psql -U verifiedsignal -d verifiedsignal -v ON_ERROR_STOP=1 \
+		< db/migrations/007_model_writebacks.up.sql
 
 ci-local-migrate: ci-local-postgres ci-local-migrate-sql
 

@@ -18,6 +18,8 @@ This directory holds **canonical** schema definitions for VerifiedSignal. The ap
 | `migrations/005_documents_user_metadata.down.sql` | Drops **`user_metadata`**. |
 | `migrations/006_knowledge_models.up.sql` | **Knowledge models**: `knowledge_models`, `knowledge_model_versions`, `knowledge_model_assets`, `model_build_runs` (versioned, auditable builds from selected collection documents). |
 | `migrations/006_knowledge_models.down.sql` | Rollback (drops knowledge-model tables). |
+| `migrations/007_model_writebacks.up.sql` | **Model write-back**: `model_writeback_artifacts`, `model_writeback_events` (findings, risks, tests, execution, evidence, contradictions; provenance + verification). |
+| `migrations/007_model_writebacks.down.sql` | Rollback (drops write-back tables). |
 
 **Planned (design only):** further metadata layers — **[`docs/document-metadata-design.md`](../docs/document-metadata-design.md)** (`analysis_metadata`, `document_tags`, etc.). **`user_metadata`** is implemented in **005** for intake + search.
 
@@ -29,9 +31,9 @@ From the repo root, with **Docker Compose Postgres** already running (`docker co
 make migrate
 ```
 
-That applies **001** through **006** via `docker compose exec` (same as below).
+That applies **001** through **007** via `docker compose exec` (same as below).
 
-**`relation "users" already exists`:** **001** is already applied. You may only need **002**–**006**:
+**`relation "users" already exists`:** **001** is already applied. You may only need **002**–**007**:
 
 ```bash
 make migrate-002

@@ -29,6 +29,9 @@ def test_tools_resources_prompts_registered():
         assert "list_collections" in tool_names
         assert "search_model" in tool_names
         assert "compare_model_versions" in tool_names
+        assert "write_finding" in tool_names
+        assert "list_writebacks" in tool_names
+        assert "list_model_activity" in tool_names
 
         res = await mcp.list_resources()
         resource_list = res if isinstance(res, list) else res.resources

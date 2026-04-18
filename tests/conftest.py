@@ -96,7 +96,7 @@ def jwt_integration_client(monkeypatch: pytest.MonkeyPatch):
     """
     FastAPI TestClient with real Postgres, no `get_current_user` override — uses signed JWTs.
 
-    Skips when DATABASE_URL is unset. Requires migrations 001–005 applied (same as CI).
+    Skips when DATABASE_URL is unset. Requires migrations applied (same as CI through 007).
     Yields (client, make_token) where make_token(sub=..., email=...) returns a Bearer string value.
     """
     database_url = os.environ.get("DATABASE_URL")

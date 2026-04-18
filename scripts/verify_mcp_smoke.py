@@ -22,7 +22,7 @@ async def _main() -> None:
     import mcp_server.server  # noqa: F401
 
     tools = await mcp.list_tools()
-    assert len(tools) >= 8, f"expected tools, got {len(tools)}"
+    assert len(tools) >= 17, f"expected tools, got {len(tools)}"
 
     resources = await mcp.list_resources()
     rlist = resources if isinstance(resources, list) else resources.resources

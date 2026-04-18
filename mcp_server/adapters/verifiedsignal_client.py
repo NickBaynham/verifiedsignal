@@ -104,3 +104,68 @@ class VerifiedSignalClient:
             "GET",
             f"/api/v1/models/{model_id}/versions/{version_id}/assets",
         )
+
+    def list_model_writebacks(
+        self,
+        model_id: str,
+        *,
+        params: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        return self.request_json(
+            "GET",
+            f"/api/v1/models/{model_id}/writebacks",
+            params=params,
+        )
+
+    def get_model_writeback(self, model_id: str, writeback_id: str) -> dict[str, Any]:
+        return self.request_json(
+            "GET",
+            f"/api/v1/models/{model_id}/writebacks/{writeback_id}",
+        )
+
+    def get_model_activity(self, model_id: str) -> dict[str, Any]:
+        return self.request_json("GET", f"/api/v1/models/{model_id}/activity")
+
+    def post_writeback_finding(self, model_id: str, body: dict[str, Any]) -> dict[str, Any]:
+        return self.request_json(
+            "POST",
+            f"/api/v1/models/{model_id}/writebacks/findings",
+            json_body=body,
+        )
+
+    def post_writeback_risk(self, model_id: str, body: dict[str, Any]) -> dict[str, Any]:
+        return self.request_json(
+            "POST",
+            f"/api/v1/models/{model_id}/writebacks/risks",
+            json_body=body,
+        )
+
+    def post_writeback_test_artifact(self, model_id: str, body: dict[str, Any]) -> dict[str, Any]:
+        return self.request_json(
+            "POST",
+            f"/api/v1/models/{model_id}/writebacks/test-artifacts",
+            json_body=body,
+        )
+
+    def post_writeback_execution_result(
+        self, model_id: str, body: dict[str, Any]
+    ) -> dict[str, Any]:
+        return self.request_json(
+            "POST",
+            f"/api/v1/models/{model_id}/writebacks/execution-results",
+            json_body=body,
+        )
+
+    def post_writeback_evidence_note(self, model_id: str, body: dict[str, Any]) -> dict[str, Any]:
+        return self.request_json(
+            "POST",
+            f"/api/v1/models/{model_id}/writebacks/evidence-notes",
+            json_body=body,
+        )
+
+    def post_writeback_contradiction(self, model_id: str, body: dict[str, Any]) -> dict[str, Any]:
+        return self.request_json(
+            "POST",
+            f"/api/v1/models/{model_id}/writebacks/contradictions",
+            json_body=body,
+        )

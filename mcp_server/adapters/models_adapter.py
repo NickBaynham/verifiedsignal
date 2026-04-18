@@ -177,6 +177,256 @@ class ModelsAdapter:
             ),
         }
 
+    @staticmethod
+    def _agent_provenance(
+        *,
+        origin_id: str | None = None,
+        verification_state: str = "proposed",
+    ) -> dict[str, Any]:
+        p: dict[str, Any] = {"origin_type": "agent", "verification_state": verification_state}
+        if origin_id:
+            p["origin_id"] = origin_id
+        return p
+
+    def list_writebacks(
+        self,
+        model_id: str,
+        *,
+        artifact_kind: str | None = None,
+        verification_state: str | None = None,
+        version_id: str | None = None,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> dict[str, Any]:
+        params: dict[str, Any] = {"limit": limit, "offset": offset}
+        if artifact_kind:
+            params["artifact_kind"] = artifact_kind
+        if verification_state:
+            params["verification_state"] = verification_state
+        if version_id:
+            params["version_id"] = version_id
+        return self._c.list_model_writebacks(model_id, params=params)
+
+    def get_writeback(self, model_id: str, writeback_id: str) -> dict[str, Any]:
+        return self._c.get_model_writeback(model_id, writeback_id)
+
+    def list_model_activity(self, model_id: str) -> dict[str, Any]:
+        return self._c.get_model_activity(model_id)
+
+    def write_finding(
+        self,
+        model_id: str,
+        title: str,
+        *,
+        model_version_id: str | None = None,
+        summary: str | None = None,
+        details: str | None = None,
+        confidence_score: float | None = None,
+        related_document_id: str | None = None,
+        related_asset_id: str | None = None,
+        evidence_refs: list[dict[str, Any]] | None = None,
+        agent_origin_id: str | None = None,
+    ) -> dict[str, Any]:
+        body: dict[str, Any] = {
+            "title": title,
+            "provenance": self._agent_provenance(origin_id=agent_origin_id),
+        }
+        if model_version_id:
+            body["model_version_id"] = model_version_id
+        if summary is not None:
+            body["summary"] = summary
+        if details is not None:
+            body["details"] = details
+        if confidence_score is not None:
+            body["confidence_score"] = confidence_score
+        if related_document_id:
+            body["related_document_id"] = related_document_id
+        if related_asset_id:
+            body["related_asset_id"] = related_asset_id
+        if evidence_refs:
+            body["evidence_refs"] = evidence_refs
+        return self._c.post_writeback_finding(model_id, body)
+
+    def write_risk(
+        self,
+        model_id: str,
+        title: str,
+        *,
+        model_version_id: str | None = None,
+        details: str | None = None,
+        severity: str | None = None,
+        likelihood: str | None = None,
+        summary: str | None = None,
+        related_document_id: str | None = None,
+        related_asset_id: str | None = None,
+        evidence_refs: list[dict[str, Any]] | None = None,
+        agent_origin_id: str | None = None,
+    ) -> dict[str, Any]:
+        body: dict[str, Any] = {
+            "title": title,
+            "provenance": self._agent_provenance(origin_id=agent_origin_id),
+        }
+        if model_version_id:
+            body["model_version_id"] = model_version_id
+        if summary is not None:
+            body["summary"] = summary
+        if details is not None:
+            body["details"] = details
+        if severity:
+            body["severity"] = severity
+        if likelihood:
+            body["likelihood"] = likelihood
+        if related_document_id:
+            body["related_document_id"] = related_document_id
+        if related_asset_id:
+            body["related_asset_id"] = related_asset_id
+        if evidence_refs:
+            body["evidence_refs"] = evidence_refs
+        return self._c.post_writeback_risk(model_id, body)
+
+    def write_test_artifact(
+        self,
+        model_id: str,
+        artifact_subtype: str,
+        title: str,
+        *,
+        model_version_id: str | None = None,
+        content: str | None = None,
+        summary: str | None = None,
+        related_document_id: str | None = None,
+        related_asset_id: str | None = None,
+        related_risk_id: str | None = None,
+        evidence_refs: list[dict[str, Any]] | None = None,
+        agent_origin_id: str | None = None,
+    ) -> dict[str, Any]:
+        body: dict[str, Any] = {
+            "artifact_subtype": artifact_subtype,
+            "title": title,
+            "provenance": self._agent_provenance(origin_id=agent_origin_id),
+        }
+        if model_version_id:
+            body["model_version_id"] = model_version_id
+        if content is not None:
+            body["content"] = content
+        if summary is not None:
+            body["summary"] = summary
+        if related_document_id:
+            body["related_document_id"] = related_document_id
+        if related_asset_id:
+            body["related_asset_id"] = related_asset_id
+        if related_risk_id:
+            body["related_risk_id"] = related_risk_id
+        if evidence_refs:
+            body["evidence_refs"] = evidence_refs
+        return self._c.post_writeback_test_artifact(model_id, body)
+
+    def write_execution_result(
+        self,
+        model_id: str,
+        title: str,
+        status: str,
+        *,
+        model_version_id: str | None = None,
+        summary: str | None = None,
+        details: str | None = None,
+        related_test_artifact_id: str | None = None,
+        related_document_id: str | None = None,
+        related_asset_id: str | None = None,
+        evidence_refs: list[dict[str, Any]] | None = None,
+        agent_origin_id: str | None = None,
+    ) -> dict[str, Any]:
+        body: dict[str, Any] = {
+            "title": title,
+            "status": status,
+            "provenance": self._agent_provenance(origin_id=agent_origin_id),
+        }
+        if model_version_id:
+            body["model_version_id"] = model_version_id
+        if summary is not None:
+            body["summary"] = summary
+        if details is not None:
+            body["details"] = details
+        if related_test_artifact_id:
+            body["related_test_artifact_id"] = related_test_artifact_id
+        if related_document_id:
+            body["related_document_id"] = related_document_id
+        if related_asset_id:
+            body["related_asset_id"] = related_asset_id
+        if evidence_refs:
+            body["evidence_refs"] = evidence_refs
+        return self._c.post_writeback_execution_result(model_id, body)
+
+    def write_evidence_note(
+        self,
+        model_id: str,
+        title: str,
+        *,
+        model_version_id: str | None = None,
+        details: str | None = None,
+        summary: str | None = None,
+        related_document_id: str | None = None,
+        related_asset_id: str | None = None,
+        citation: dict[str, Any] | None = None,
+        evidence_refs: list[dict[str, Any]] | None = None,
+        agent_origin_id: str | None = None,
+    ) -> dict[str, Any]:
+        body: dict[str, Any] = {
+            "title": title,
+            "provenance": self._agent_provenance(origin_id=agent_origin_id),
+        }
+        if model_version_id:
+            body["model_version_id"] = model_version_id
+        if summary is not None:
+            body["summary"] = summary
+        if details is not None:
+            body["details"] = details
+        if related_document_id:
+            body["related_document_id"] = related_document_id
+        if related_asset_id:
+            body["related_asset_id"] = related_asset_id
+        if citation:
+            body["citation"] = citation
+        if evidence_refs:
+            body["evidence_refs"] = evidence_refs
+        return self._c.post_writeback_evidence_note(model_id, body)
+
+    def write_contradiction(
+        self,
+        model_id: str,
+        title: str,
+        *,
+        model_version_id: str | None = None,
+        details: str | None = None,
+        summary: str | None = None,
+        related_document_id: str | None = None,
+        related_asset_id: str | None = None,
+        conflicting_reference_a: dict[str, Any] | None = None,
+        conflicting_reference_b: dict[str, Any] | None = None,
+        evidence_refs: list[dict[str, Any]] | None = None,
+        agent_origin_id: str | None = None,
+    ) -> dict[str, Any]:
+        body: dict[str, Any] = {
+            "title": title,
+            "provenance": self._agent_provenance(origin_id=agent_origin_id),
+        }
+        if model_version_id:
+            body["model_version_id"] = model_version_id
+        if summary is not None:
+            body["summary"] = summary
+        if details is not None:
+            body["details"] = details
+        if related_document_id:
+            body["related_document_id"] = related_document_id
+        if related_asset_id:
+            body["related_asset_id"] = related_asset_id
+        if conflicting_reference_a:
+            body["conflicting_reference_a"] = conflicting_reference_a
+        if conflicting_reference_b:
+            body["conflicting_reference_b"] = conflicting_reference_b
+        if evidence_refs:
+            body["evidence_refs"] = evidence_refs
+        return self._c.post_writeback_contradiction(model_id, body)
+
 
 def format_json_for_mcp(data: Any) -> str:
     """Claude-friendly pretty JSON."""
