@@ -4,9 +4,25 @@ import { defineConfig } from "vitest/config";
 export default defineConfig({
   plugins: [react()],
   test: {
-    environment: "node",
-    environmentMatchGlobs: [["**/*.test.tsx", "jsdom"]],
-    setupFiles: ["./src/test/setup.ts"],
-    include: ["src/**/*.test.ts", "src/**/*.test.tsx"],
+    projects: [
+      {
+        extends: true,
+        test: {
+          name: "node",
+          environment: "node",
+          include: ["src/**/*.test.ts"],
+          setupFiles: ["./src/test/setup.ts"],
+        },
+      },
+      {
+        extends: true,
+        test: {
+          name: "jsdom",
+          environment: "jsdom",
+          include: ["src/**/*.test.tsx"],
+          setupFiles: ["./src/test/setup.ts"],
+        },
+      },
+    ],
   },
 });
