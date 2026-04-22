@@ -74,5 +74,9 @@ def test_sse_accepts_access_token_query(jwt_integration_client) -> None:
     client, make_token = jwt_integration_client
     sub = "cccccccc-cccc-4ccc-8ccc-cccccccccccc"
     tok = make_token(sub=sub, email="sse@example.com")
-    r = client.get(f"/api/v1/events/stream?access_token={quote(tok, safe='')}")
-    assert r.status_code == 200
+    # SSE never finishes; plain client.get() waits for the full body and hangs.
+    with client.stream(
+        "GET",
+        f"/api/v1/events/stream?access_token={quote(tok, safe='')}",
+    ) as r:
+        assert r.status_code == 200
