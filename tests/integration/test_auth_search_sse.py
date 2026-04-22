@@ -19,7 +19,7 @@ def unauth_api_client(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setenv("USE_FAKE_STORAGE", "true")
     monkeypatch.setenv("USE_FAKE_OPENSEARCH", "true")
     monkeypatch.setenv("RATE_LIMIT_ENABLED", "false")
-    # CI or a developer .env may set legacy anonymous SSE; plain GET on /events/stream then never ends.
+    # Legacy anonymous SSE in .env/CI: GET /events/stream would never finish (unbounded body).
     monkeypatch.setenv("VERIFIEDSIGNAL_REQUIRE_AUTH_SSE", "true")
     monkeypatch.setenv("VERIFIEDSIGNAL_REQUIRE_AUTH_SEARCH", "true")
     reset_settings_cache()
