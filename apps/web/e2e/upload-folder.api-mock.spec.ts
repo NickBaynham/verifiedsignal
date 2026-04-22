@@ -23,7 +23,8 @@ test.describe("Upload folder (API mock)", () => {
       { relativePath: "e2e-upload-folder/root.txt", content: "root fixture\n" },
       { relativePath: "e2e-upload-folder/sub/inner.txt", content: "nested fixture\n" },
     ]);
-    await expect(page.getByText(/Added:|Updated:/)).toBeVisible({ timeout: 30_000 });
+    // localDirectorySync logs these prefixes (see apps/web/src/lib/localDirectorySync.ts)
+    await expect(page.getByText(/Uploaded:|Unchanged:/)).toBeVisible({ timeout: 30_000 });
     await expect(page.getByText(/root\.txt/)).toBeVisible();
     await expect(page.getByText(/inner\.txt/)).toBeVisible();
   });
